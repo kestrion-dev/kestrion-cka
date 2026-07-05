@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kestrion — Preparación CKA en español, gratis e interactiva</title>
+  <meta name="description" content="Entrena el examen CKA como se hace de verdad: quiz con respuestas ocultas, laboratorios cronometrados y seguimiento de progreso. Curso gratuito, en español y sin registro.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Kestrion — Preparación CKA en español">
+  <meta property="og:description" content="Quiz de autoevaluación, laboratorios cronometrados y progreso automático. Gratis, open source y sin registro.">
+  <meta property="og:url" content="https://kestrion.dev/">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232563eb'/%3E%3Ctext x='32' y='44' font-family='sans-serif' font-size='30' font-weight='800' fill='white' text-anchor='middle'%3EK%3C/text%3E%3C/svg%3E">
+  <script>
+    try {
+      const stored = localStorage.getItem("cka.theme");
+      const dark = stored ? stored === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+    } catch (e) { /* sin localStorage */ }
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f8fc;
+      --bg-soft: #eef3fb;
+      --panel: #ffffff;
+      --text: #101a2e;
+      --text-2: #45526c;
+      --muted: #68758f;
+      --line: #dfe6f2;
+      --accent: #2563eb;
+      --accent-strong: #1d4ed8;
+      --accent-soft: #e8efff;
+      --ok: #0ca30c;
+      --code-bg: #0f172a;
+      --code-text: #d7e3f4;
+      --shadow: 0 20px 60px rgba(23, 37, 84, 0.10);
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0b1220;
+      --bg-soft: #0e1730;
+      --panel: #111c33;
+      --text: #e7edf9;
+      --text-2: #b6c2d9;
+      --muted: #8b98b3;
+      --line: #223252;
+      --accent: #4f83f1;
+      --accent-strong: #78a2f5;
+      --accent-soft: #16243f;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      line-height: 1.6;
+    }
+    a { color: var(--accent-strong); }
+    .wrap { max-width: 68rem; margin: 0 auto; padding: 0 1.25rem; }
+
+    /* ------------------------------------------------------------- nav */
+    .nav {
+      position: sticky; top: 0; z-index: 10;
+      background: color-mix(in srgb, var(--bg) 82%, transparent);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--line);
+    }
+    .nav-inner { display: flex; align-items: center; gap: 1.4rem; padding: 0.7rem 0; }
+    .logo { display: flex; align-items: center; gap: 0.55rem; font-weight: 800; font-size: 1.05rem; color: var(--text); text-decoration: none; }
+    .logo-mark {
+      display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 8px;
+      background: var(--accent); color: #fff; font-weight: 800; font-size: 1rem;
+    }
+    .nav-links { display: flex; gap: 1.1rem; margin-left: auto; }
+    .nav-links a { color: var(--text-2); text-decoration: none; font-size: 0.92rem; font-weight: 600; }
+    .nav-links a:hover { color: var(--accent-strong); }
+    .nav .cta-small {
+      margin-left: 0.4rem; padding: 0.45rem 0.9rem; border-radius: 8px;
+      background: var(--accent); color: #fff; text-decoration: none; font-weight: 700; font-size: 0.9rem;
+    }
+    @media (max-width: 720px) { .nav-links a:not(.cta-small) { display: none; } }
+
+    /* ------------------------------------------------------------ hero */
+    .hero { padding: 4rem 0 3rem; background: radial-gradient(60rem 30rem at 80% -10%, var(--accent-soft), transparent); }
+    .hero-grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 3rem; align-items: center; }
+    @media (max-width: 860px) { .hero-grid { grid-template-columns: 1fr; } }
+    .eyebrow { color: var(--accent-strong); font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 0.8rem; }
+    h1 { margin: 0 0 1rem; font-size: clamp(1.9rem, 4.4vw, 3rem); line-height: 1.12; letter-spacing: -0.02em; }
+    .hero p.lead { margin: 0 0 1.6rem; color: var(--text-2); font-size: 1.12rem; max-width: 34rem; }
+    .cta-row { display: flex; flex-wrap: wrap; gap: 0.7rem; margin-bottom: 1.1rem; }
+    .cta {
+      display: inline-block; padding: 0.85rem 1.5rem; border-radius: 10px; text-decoration: none;
+      font-weight: 800; font-size: 1rem;
+    }
+    .cta.primary { background: var(--accent); color: #fff; box-shadow: 0 8px 24px rgba(37, 99, 235, 0.35); }
+    .cta.primary:hover { background: var(--accent-strong); }
+    .cta.ghost { border: 1px solid var(--line); color: var(--text); background: var(--panel); }
+    .cta.continue { border: 1px solid var(--accent); color: var(--accent-strong); background: var(--accent-soft); }
+    .hero-badges { display: flex; flex-wrap: wrap; gap: 0.9rem; color: var(--muted); font-size: 0.86rem; font-weight: 600; }
+    .hero-badges span::before { content: "✓ "; color: var(--ok); font-weight: 800; }
+
+    /* mock de la app */
+    .mock {
+      border: 1px solid var(--line); border-radius: 14px; background: var(--panel);
+      box-shadow: var(--shadow); overflow: hidden; font-size: 0.9rem;
+    }
+    .mock-bar { display: flex; align-items: center; gap: 0.45rem; padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--line); }
+    .dot { width: 0.65rem; height: 0.65rem; border-radius: 50%; background: var(--line); }
+    .dot:first-child { background: #f87171; } .dot:nth-child(2) { background: #fbbf24; } .dot:nth-child(3) { background: #34d399; }
+    .mock-url { margin-left: 0.5rem; color: var(--muted); font-size: 0.78rem; font-family: ui-monospace, monospace; }
+    .mock-body { padding: 1rem; display: grid; gap: 0.8rem; }
+    .mock-progress { display: flex; align-items: center; gap: 0.7rem; color: var(--muted); font-size: 0.78rem; font-weight: 700; }
+    .mock-meter { flex: 1; height: 6px; border-radius: 999px; background: var(--accent-soft); overflow: hidden; }
+    .mock-meter span { display: block; height: 100%; width: 62%; border-radius: 999px; background: var(--accent); }
+    .mock-quiz { border: 1px solid var(--line); border-radius: 10px; padding: 0.85rem 1rem; }
+    .mock-quiz .q-tag { color: var(--accent-strong); font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
+    .mock-quiz .q-text { margin: 0.3rem 0 0.65rem; font-weight: 650; }
+    .mock-quiz .q-btn {
+      display: inline-block; padding: 0.4rem 0.8rem; border-radius: 8px; border: 1px solid var(--accent);
+      color: var(--accent-strong); background: var(--accent-soft); font-weight: 700; font-size: 0.8rem;
+    }
+    .mock-code {
+      background: var(--code-bg); color: var(--code-text); border-radius: 10px; padding: 0.7rem 0.9rem;
+      font-family: ui-monospace, "JetBrains Mono", Consolas, monospace; font-size: 0.8rem; overflow-x: auto; white-space: nowrap;
+      scrollbar-width: none;
+    }
+    .mock-code::-webkit-scrollbar { display: none; }
+    .mock-code .c { color: #7dd3fc; } .mock-code .f { color: #c4b5fd; }
+    .mock-timer { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; border: 1px solid var(--line); border-radius: 10px; padding: 0.6rem 1rem; }
+    .mock-timer .t-label { color: var(--muted); font-size: 0.78rem; font-weight: 700; }
+    .mock-timer .t-clock { font-family: ui-monospace, monospace; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+    /* ----------------------------------------------------------- resto */
+    section { padding: 3.2rem 0; }
+    .section-title { margin: 0 0 0.5rem; font-size: clamp(1.4rem, 3vw, 2rem); letter-spacing: -0.01em; }
+    .section-sub { margin: 0 0 2rem; color: var(--text-2); max-width: 40rem; }
+
+    .stats { border-block: 1px solid var(--line); background: var(--bg-soft); padding: 1.6rem 0; }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; text-align: center; }
+    @media (max-width: 720px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+    .stat b { display: block; font-size: 1.7rem; letter-spacing: -0.02em; }
+    .stat span { color: var(--muted); font-size: 0.86rem; font-weight: 600; }
+
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    @media (max-width: 860px) { .grid-3 { grid-template-columns: 1fr; } }
+    .card { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 1.2rem 1.25rem; }
+    .card .ico { font-size: 1.3rem; }
+    .card h3 { margin: 0.5rem 0 0.35rem; font-size: 1.02rem; }
+    .card p { margin: 0; color: var(--text-2); font-size: 0.92rem; }
+
+    .steps { counter-reset: paso; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    @media (max-width: 860px) { .steps { grid-template-columns: 1fr; } }
+    .step { position: relative; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 1.2rem 1.25rem 1.2rem 3.4rem; }
+    .step::before {
+      counter-increment: paso; content: counter(paso);
+      position: absolute; left: 1rem; top: 1.1rem;
+      display: grid; place-items: center; width: 1.7rem; height: 1.7rem; border-radius: 50%;
+      background: var(--accent); color: #fff; font-weight: 800; font-size: 0.9rem;
+    }
+    .step h3 { margin: 0 0 0.3rem; font-size: 1rem; }
+    .step p { margin: 0; color: var(--text-2); font-size: 0.92rem; }
+
+    .mod-list { display: grid; gap: 0.6rem; }
+    .mod {
+      display: flex; align-items: center; gap: 0.9rem;
+      border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 0.8rem 1rem;
+    }
+    .mod-code { flex: 0 0 auto; padding: 0.2rem 0.55rem; border-radius: 7px; background: var(--accent-soft); color: var(--accent-strong); font-weight: 800; font-size: 0.8rem; }
+    .mod-title { font-weight: 650; font-size: 0.95rem; }
+    .mod.soon { border-style: dashed; color: var(--muted); }
+    .mod.soon .mod-code { background: transparent; border: 1px dashed var(--line); color: var(--muted); }
+
+    .faq details { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 0; margin-bottom: 0.6rem; }
+    .faq summary { padding: 0.9rem 1.1rem; cursor: pointer; font-weight: 700; list-style: none; }
+    .faq summary::-webkit-details-marker { display: none; }
+    .faq summary::after { content: "+"; float: right; color: var(--accent-strong); font-weight: 800; }
+    .faq details[open] summary::after { content: "–"; }
+    .faq .a { padding: 0 1.1rem 1rem; color: var(--text-2); font-size: 0.95rem; }
+
+    .final-cta { text-align: center; background: var(--bg-soft); border-block: 1px solid var(--line); }
+    .final-cta h2 { margin: 0 0 0.6rem; font-size: clamp(1.4rem, 3vw, 2rem); }
+    .final-cta p { margin: 0 0 1.4rem; color: var(--text-2); }
+
+    footer { padding: 2.2rem 0 2.8rem; color: var(--muted); font-size: 0.85rem; }
+    .foot-grid { display: flex; flex-wrap: wrap; gap: 1.5rem; justify-content: space-between; align-items: flex-start; }
+    .foot-links { display: flex; gap: 1.2rem; }
+    .foot-links a { color: var(--text-2); text-decoration: none; font-weight: 600; }
+    .disclaimer { margin-top: 1.4rem; padding-top: 1.2rem; border-top: 1px solid var(--line); font-size: 0.78rem; line-height: 1.55; }
+  </style>
+</head>
+<body>
+
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="logo" href="./"><span class="logo-mark">K</span>Kestrion</a>
+      <nav class="nav-links">
+        <a href="#funciones">Funciones</a>
+        <a href="#modulos">Módulos</a>
+        <a href="#faq">FAQ</a>
+        <a href="https://github.com/kestrion-dev/kestrion-cka" rel="noopener">GitHub</a>
+        <a class="cta-small" href="./app/" data-app-link>Empezar gratis</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div>
+          <p class="eyebrow">Preparación CKA en español · Gratis y open source</p>
+          <h1>Aprueba el CKA entrenando, no memorizando</h1>
+          <p class="lead">
+            El examen CKA es 100&nbsp;% práctico y contra el reloj. Kestrion te prepara igual:
+            quiz con respuestas ocultas, laboratorios cronometrados con soluciones tapadas
+            y seguimiento de tu progreso. Sin registro, directamente en tu navegador.
+          </p>
+          <div class="cta-row">
+            <a class="cta primary" href="./app/" data-app-link>Empezar a estudiar gratis</a>
+            <a class="cta continue" href="./app/" data-app-link data-continue hidden>▶ Continuar donde lo dejaste</a>
+            <a class="cta ghost" href="#como-funciona">Cómo funciona</a>
+          </div>
+          <div class="hero-badges">
+            <span>Sin registro</span>
+            <span>100&nbsp;% en español</span>
+            <span>Open source</span>
+          </div>
+        </div>
+
+        <div class="mock" aria-hidden="true">
+          <div class="mock-bar">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="mock-url">kestrion.dev/app</span>
+          </div>
+          <div class="mock-body">
+            <div class="mock-progress">
+              <span>M00 · Kubectl avanzado</span>
+              <span class="mock-meter"><span></span></span>
+              <span>22/35</span>
+            </div>
+            <div class="mock-quiz">
+              <span class="q-tag">Checkpoint · Pregunta 2</span>
+              <p class="q-text">¿Cómo generarías el YAML de un CronJob sin crearlo en el cluster?</p>
+              <span class="q-btn">Mostrar respuesta</span>
+            </div>
+            <div class="mock-code"><span class="c">kubectl</span> create cronjob mi-job <span class="f">--image</span>=busybox <span class="f">--dry-run</span>=client <span class="f">-o</span> yaml</div>
+            <div class="mock-timer">
+              <span class="t-label">⏱ Laboratorio cronometrado · Objetivo ≤ 10 min</span>
+              <span class="t-clock">07:42</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="stats">
+      <div class="wrap stats-grid">
+        <div class="stat"><b>4</b><span>módulos completos</span></div>
+        <div class="stat"><b>20</b><span>preguntas de autoevaluación</span></div>
+        <div class="stat"><b>4</b><span>labs cronometrados</span></div>
+        <div class="stat"><b>300+</b><span>comandos listos para copiar</span></div>
+      </div>
+    </div>
+
+    <section id="funciones">
+      <div class="wrap">
+        <h2 class="section-title">Estudiar leyendo no aprueba el CKA. Esto sí.</h2>
+        <p class="section-sub">Cada función existe por una razón: el examen son 15–20 tareas reales en terminal, en 2 horas, repartidas en varios clusters.</p>
+        <div class="grid-3">
+          <div class="card"><span class="ico">🎓</span><h3>Quiz con respuestas ocultas</h3><p>Los checkpoints de cada módulo se convierten en tarjetas de autoevaluación: responde primero, comprueba después.</p></div>
+          <div class="card"><span class="ico">⏱️</span><h3>Laboratorios cronometrados</h3><p>Cronómetro integrado con el objetivo de tiempo de cada lab. Si te pasas, lo ves en rojo — como en el examen.</p></div>
+          <div class="card"><span class="ico">🔒</span><h3>Soluciones tapadas</h3><p>La solución de referencia queda borrosa hasta que decidas mirarla. Nada de spoilers accidentales.</p></div>
+          <div class="card"><span class="ico">📈</span><h3>Progreso automático</h3><p>Marca secciones estudiadas y continúa donde lo dejaste. Todo se guarda en tu navegador: sin cuentas, sin emails.</p></div>
+          <div class="card"><span class="ico">⌨️</span><h3>Comandos listos</h3><p>Cada bloque de kubectl y YAML con resaltado de sintaxis y botón de copiar. Del material a tu terminal en un clic.</p></div>
+          <div class="card"><span class="ico">🌙</span><h3>Hecho para estudiar</h3><p>Tema claro y oscuro, búsqueda global instantánea, índice por secciones y enlaces directos a cualquier apartado.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="como-funciona" style="padding-top: 0;">
+      <div class="wrap">
+        <h2 class="section-title">Cómo funciona</h2>
+        <p class="section-sub">El mismo ciclo en cada módulo, del primero al último.</p>
+        <div class="steps">
+          <div class="step"><h3>Estudia el módulo</h3><p>Teoría al grano y comandos reales, con los trucos de velocidad que marcan la diferencia en el examen.</p></div>
+          <div class="step"><h3>Ponte a prueba</h3><p>Responde el checkpoint sin mirar. Solo entonces revela la respuesta esperada y compárala con la tuya.</p></div>
+          <div class="step"><h3>Cronometra el lab</h3><p>Arranca el cronómetro y resuelve el laboratorio en tu propio cluster antes de que el tiempo objetivo se agote.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="modulos" style="padding-top: 0;">
+      <div class="wrap">
+        <h2 class="section-title">Módulos disponibles</h2>
+        <p class="section-sub">El curso crece de forma continua — cada módulo nuevo aparece aquí y en la app automáticamente.</p>
+        <div class="mod-list">
+          <div class="mod"><span class="mod-code">M00</span><span class="mod-title">Entorno de laboratorio, kubectl avanzado y estrategia de examen</span></div>
+          <div class="mod"><span class="mod-code">M01</span><span class="mod-title">Arquitectura de Kubernetes</span></div>
+          <div class="mod"><span class="mod-code">M02</span><span class="mod-title">Instalación y configuración con kubeadm</span></div>
+          <div class="mod"><span class="mod-code">M03</span><span class="mod-title">RBAC y seguridad del cluster</span></div>
+          <div class="mod soon"><span class="mod-code">M04+</span><span class="mod-title">Networking, almacenamiento, troubleshooting… en camino</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="faq" style="padding-top: 0;">
+      <div class="wrap">
+        <h2 class="section-title">Preguntas frecuentes</h2>
+        <div class="faq">
+          <details>
+            <summary>¿Es gratis de verdad?</summary>
+            <div class="a">Sí. El curso completo y todas las funciones de estudio son gratuitos y el código es open source. Si en el futuro añadimos material premium (simulacros extra, módulos avanzados), lo gratuito seguirá siéndolo.</div>
+          </details>
+          <details>
+            <summary>¿Necesito registrarme?</summary>
+            <div class="a">No. No hay cuentas ni emails: tu progreso se guarda en el almacenamiento local de tu navegador. Entras y estudias.</div>
+          </details>
+          <details>
+            <summary>¿Necesito un cluster para practicar?</summary>
+            <div class="a">Para los laboratorios, sí — el módulo M00 te guía para montar tu entorno de práctica (K3s o kubeadm) paso a paso. Es la misma filosofía del examen: todo se aprende ejecutando.</div>
+          </details>
+          <details>
+            <summary>¿Está actualizado con el examen actual?</summary>
+            <div class="a">El contenido sigue el formato vigente del examen CKA y se revisa con cada versión de Kubernetes. La fecha de última actualización siempre está visible en el repositorio.</div>
+          </details>
+          <details>
+            <summary>¿Quién está detrás de Kestrion?</summary>
+            <div class="a">Kestrion es un proyecto educativo independiente. No está afiliado a The Linux Foundation ni a la CNCF. ¿Dudas o sugerencias? Escríbenos: <a href="mailto:contacto@kestrion.dev">contacto@kestrion.dev</a>.</div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section class="final-cta">
+      <div class="wrap">
+        <h2>Tu examen es contra el reloj. Tu preparación también debería serlo.</h2>
+        <p>Empieza por el módulo M00 — en 10 minutos estarás generando YAML más rápido de lo que creías posible.</p>
+        <a class="cta primary" href="./app/" data-app-link>Empezar a estudiar gratis</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div class="foot-grid">
+        <a class="logo" href="./"><span class="logo-mark">K</span>Kestrion</a>
+        <nav class="foot-links">
+          <a href="./app/" data-app-link>La app</a>
+          <a href="https://github.com/kestrion-dev/kestrion-cka" rel="noopener">GitHub</a>
+          <a href="mailto:contacto@kestrion.dev">Contacto</a>
+        </nav>
+      </div>
+      <!-- Espacio reservado para futuros bloques: banner/afiliados y servicio de consultoría. -->
+      <p class="disclaimer">
+        Kubernetes® y CKA® (Certified Kubernetes Administrator) son marcas registradas de The Linux Foundation en Estados Unidos y otros países.
+        Kestrion es un proyecto educativo independiente y no está afiliado, asociado ni respaldado por The Linux Foundation ni por la Cloud Native Computing Foundation.
+        © 2026 Kestrion.
+      </p>
+    </div>
+  </footer>
+
+  <script>
+    // La app vive en ./app/ en producción (dist/) y en ../cka-study-web/ al
+    // servir el repo en local con start.sh.
+    (function () {
+      const local = location.pathname.includes("/landing/");
+      const appHref = local ? "../cka-study-web/" : "./app/";
+      document.querySelectorAll("[data-app-link]").forEach((a) => { a.href = appHref; });
+
+      try {
+        const progress = JSON.parse(localStorage.getItem("cka.progress") || "{}");
+        const last = JSON.parse(localStorage.getItem("cka.lastPosition") || "null");
+        if (Object.keys(progress).length || last) {
+          document.querySelector("[data-continue]").hidden = false;
+        }
+      } catch (e) { /* sin localStorage */ }
+    })();
+  </script>
+</body>
+</html>

@@ -14,11 +14,19 @@ modulos/
   M03-rbac-seguridad.txt
 ```
 
-- **Añadir un módulo** = crear `modulos/M04-lo-que-sea.txt` y refrescar el navegador. La web detecta sola los ficheros (los pide al servidor local y los ordena por nombre).
+- **Añadir un módulo** = crear `modulos/M04-lo-que-sea.txt` y refrescar el navegador (en local, `start.sh` regenera el índice al arrancar; si ya tenías el servidor corriendo, ejecuta `bash cka-study-web/build-manifest.sh` o simplemente reinicia `start.sh`).
 - El nombre debe **empezar por `MXX`** (eso define el orden); el resto del nombre es solo descriptivo.
 - El contenido interno es el mismo formato de siempre (`==== / MXX - TÍTULO / ==== / MODULO: MXX ...`): el título que se muestra sale de esa cabecera, no del nombre del fichero.
 - Si la carpeta `modulos/` no existe, la web cae automáticamente al fichero único `CURSO-CKA-claude.txt` (que se conserva como respaldo, ya no hace falta editarlo).
 - El progreso guardado no se pierde al reorganizar ficheros: cada sección se identifica por módulo + título.
+
+### Cómo descubre la web los módulos (tres fuentes, en orden)
+
+1. **`modulos/index.json`** — manifiesto con la lista de ficheros, generado por `cka-study-web/build-manifest.sh`. Es lo que permite desplegar en **hosting estático** (Cloudflare Pages, GitHub Pages...), donde el servidor no genera listados de directorio. En Cloudflare Pages: comando de build = `bash cka-study-web/build-manifest.sh`.
+2. **Listado de directorio** de `modulos/` — lo genera el `python http.server` de `start.sh`; cubre el uso local aunque el manifiesto falte o esté vacío.
+3. **`CURSO-CKA-claude.txt`** — TXT único original, último recurso.
+
+Si el manifiesto lista un fichero que ya no existe, ese fichero se omite (aviso en la consola del navegador) sin tumbar la carga. El pie del índice lateral muestra qué fuente se usó (`índice` o `listado`).
 
 ## Abrir
 

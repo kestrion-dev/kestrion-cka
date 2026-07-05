@@ -77,37 +77,87 @@ async function init() {
   }
 }
 
-// Carga el curso desde modulos/*.txt (listado del servidor de start.sh,
-// ordenado por nombre de fichero) y, si la carpeta no existe, cae al TXT único.
+// Carga el curso probando tres fuentes en orden:
+//   1. modulos/index.json — manifiesto generado por build-manifest.sh; es lo
+//      que funciona en hosting estático (Cloudflare Pages, GitHub Pages...),
+//      donde el servidor no genera listados de directorio.
+//   2. Listado de directorio de modulos/ — lo genera python http.server
+//      (start.sh); cubre el uso local aunque el manifiesto no exista.
+//   3. CURSO-CKA-claude.txt — TXT único original, como último recurso.
 async function loadCourseText() {
-  try {
-    const listing = await fetch(MODULES_DIR, { cache: "no-store" });
-    if (listing.ok) {
-      const html = await listing.text();
-      const files = [...html.matchAll(/href="([^"?#]+\.txt)"/gi)]
-        .map((match) => decodeURIComponent(match[1]))
-        .filter((name) => !name.includes("/"))
-        .sort((a, b) => a.localeCompare(b, "es"));
-
-      if (files.length) {
-        const texts = await Promise.all(files.map(async (name) => {
-          const response = await fetch(MODULES_DIR + encodeURIComponent(name), { cache: "no-store" });
-          if (!response.ok) throw new Error(`No se pudo cargar modulos/${name}`);
-          return response.text();
-        }));
-        return {
-          text: texts.join("\n\n"),
-          source: `modulos/ (${files.length} fichero${files.length === 1 ? "" : "s"})`,
-        };
-      }
+  const manifestFiles = await discoverFromManifest();
+  if (manifestFiles.length) {
+    const loaded = await fetchModuleTexts(manifestFiles);
+    if (loaded.texts.length) {
+      return {
+        text: loaded.texts.join("\n\n"),
+        source: `modulos/ (${loaded.texts.length} fichero${loaded.texts.length === 1 ? "" : "s"} · índice)`,
+      };
     }
-  } catch (error) {
-    console.warn("Sin carpeta modulos/, usando el TXT único.", error);
+  }
+
+  const listedFiles = await discoverFromListing();
+  if (listedFiles.length) {
+    const loaded = await fetchModuleTexts(listedFiles);
+    if (loaded.texts.length) {
+      return {
+        text: loaded.texts.join("\n\n"),
+        source: `modulos/ (${loaded.texts.length} fichero${loaded.texts.length === 1 ? "" : "s"} · listado)`,
+      };
+    }
   }
 
   const response = await fetch(FALLBACK_SOURCE, { cache: "no-store" });
   if (!response.ok) throw new Error(`No se pudo cargar ${FALLBACK_SOURCE}`);
   return { text: await response.text(), source: "CURSO-CKA-claude.txt" };
+}
+
+async function discoverFromManifest() {
+  try {
+    const response = await fetch(`${MODULES_DIR}index.json`, { cache: "no-store" });
+    if (!response.ok) return [];
+    const names = await response.json();
+    if (!Array.isArray(names)) return [];
+    return sortModuleFiles(names.filter((name) => typeof name === "string" && name.endsWith(".txt")));
+  } catch (error) {
+    console.warn("Sin modulos/index.json legible.", error);
+    return [];
+  }
+}
+
+async function discoverFromListing() {
+  try {
+    const response = await fetch(MODULES_DIR, { cache: "no-store" });
+    if (!response.ok) return [];
+    const html = await response.text();
+    const names = [...html.matchAll(/href="([^"?#]+\.txt)"/gi)].map((match) => decodeURIComponent(match[1]));
+    return sortModuleFiles(names);
+  } catch (error) {
+    console.warn("Sin listado de modulos/.", error);
+    return [];
+  }
+}
+
+function sortModuleFiles(names) {
+  return [...new Set(names)]
+    .filter((name) => !name.includes("/"))
+    .sort((a, b) => a.localeCompare(b, "es"));
+}
+
+// Descarga los ficheros del curso; uno que falte (manifiesto desfasado) se
+// omite con aviso en consola en lugar de tumbar la carga completa.
+async function fetchModuleTexts(files) {
+  const texts = await Promise.all(files.map(async (name) => {
+    try {
+      const response = await fetch(MODULES_DIR + encodeURIComponent(name), { cache: "no-store" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.text();
+    } catch (error) {
+      console.warn(`Se omite modulos/${name}:`, error);
+      return null;
+    }
+  }));
+  return { texts: texts.filter((text) => text !== null) };
 }
 
 /* ---------------------------------------------------------------- eventos */

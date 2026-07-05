@@ -1,0 +1,6 @@
+[
+  "M00-entorno-kubectl.txt",
+  "M01-arquitectura.txt",
+  "M02-instalacion-kubeadm.txt",
+  "M03-rbac-seguridad.txt"
+]
