@@ -1,0 +1,22 @@
+CONTENIDO DEL CURSO — © 2026 Kestrion. Todos los derechos reservados.
+
+El material de estudio de esta carpeta (los módulos del curso de
+preparación CKA) es propiedad de Kestrion.
+
+PERMITIDO sin autorización previa:
+  - Estudiar con este material, en la web (kestrion.dev) o clonando
+    el repositorio para uso personal y privado.
+
+NO PERMITIDO sin autorización escrita:
+  - Republicar, redistribuir o alojar este contenido (total o
+    parcialmente) en otras webs, repositorios, cursos o plataformas.
+  - Usarlo con fines comerciales o crear cursos derivados de él.
+
+Este contenido NO está cubierto por la licencia MIT del código de la
+aplicación (ver LICENSE en la raíz del repositorio).
+
+Kubernetes(R) y CKA(R) son marcas registradas de The Linux Foundation.
+Kestrion es un proyecto educativo independiente, no afiliado a
+The Linux Foundation ni a la CNCF.
+
+Contacto para permisos: contacto@kestrion.dev

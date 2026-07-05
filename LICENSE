@@ -1,0 +1,38 @@
+Licencia de este repositorio / License of this repository
+==========================================================
+
+Este proyecto usa licencia dual:
+
+1. CÓDIGO (cka-study-web/, landing/, build.sh y demás ficheros de la
+   aplicación): licencia MIT (ver abajo). Puedes usarlo, modificarlo y
+   redistribuirlo libremente conservando el aviso de copyright.
+
+2. CONTENIDO DEL CURSO (carpeta modulos/ y todo el material de estudio):
+   © 2026 Kestrion. Todos los derechos reservados. Ver modulos/LICENSE.txt.
+   El contenido NO está cubierto por la licencia MIT: no puede reproducirse,
+   redistribuirse ni usarse comercialmente sin autorización escrita.
+   Contacto: contacto@kestrion.dev
+
+----------------------------------------------------------
+
+MIT License (aplica solo al código)
+
+Copyright (c) 2026 Kestrion
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

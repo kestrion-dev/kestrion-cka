@@ -1,3 +1,6 @@
+(c) 2026 Kestrion - Todos los derechos reservados. Ver modulos/LICENSE.txt
+Contenido del curso de https://kestrion.dev - Prohibida su redistribucion.
+
 ==================================================
 M02 - INSTALACION Y CONFIGURACION CON KUBEADM
 ==================================================

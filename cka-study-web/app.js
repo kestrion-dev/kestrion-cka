@@ -140,7 +140,7 @@ async function discoverFromListing() {
 
 function sortModuleFiles(names) {
   return [...new Set(names)]
-    .filter((name) => !name.includes("/"))
+    .filter((name) => !name.includes("/") && /^M\d+/i.test(name))
     .sort((a, b) => a.localeCompare(b, "es"));
 }
 
@@ -151,13 +151,21 @@ async function fetchModuleTexts(files) {
     try {
       const response = await fetch(MODULES_DIR + encodeURIComponent(name), { cache: "no-store" });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return await response.text();
+      return stripPreamble(await response.text());
     } catch (error) {
       console.warn(`Se omite modulos/${name}:`, error);
       return null;
     }
   }));
   return { texts: texts.filter((text) => text !== null) };
+}
+
+// Cada fichero de módulo empieza en su caja "====": el preámbulo anterior
+// (aviso de copyright, notas) no es contenido del curso y se descarta para
+// que no se cuele en el módulo previo al concatenar.
+function stripPreamble(text) {
+  const match = text.match(/^=+\s*$/m);
+  return match ? text.slice(match.index) : text;
 }
 
 /* ---------------------------------------------------------------- eventos */
