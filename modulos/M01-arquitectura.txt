@@ -1,0 +1,874 @@
+==================================================
+M01 - ARQUITECTURA DE KUBERNETES
+==================================================
+
+MODULO: M01
+TIPO: Fundacional - base de todos los modulos siguientes
+ENTORNO: K3s single-node
+PRERREQUISITOS: M00 completado (kubectl, aliases, vim)
+PESO EN EXAMEN: Cubre el dominio "Cluster Architecture"
+                que representa el 25% del examen CKA.
+TIEMPO ESTIMADO: 4-5 horas de practica
+
+--------------------------------------------------
+OBJETIVO DEL MODULO
+--------------------------------------------------
+
+Antes de operar, diagnosticar o reparar un cluster,
+necesitas entender que componentes lo forman, que hace
+cada uno y como se comunican entre si.
+
+Sin este conocimiento, el troubleshooting es adivinanza.
+Con el, cada sintoma de fallo apunta directamente
+al componente responsable.
+
+Este modulo construye el mapa mental que usaras en
+todos los modulos siguientes.
+
+--------------------------------------------------
+OBJETIVOS DE APRENDIZAJE MEDIBLES
+--------------------------------------------------
+
+Al terminar este modulo seras capaz de:
+
+1. Explicar el rol exacto de cada componente del
+   control plane y del worker node
+2. Describir el flujo completo desde kubectl apply
+   hasta que el contenedor arranca
+3. Identificar en que componente falla un cluster
+   a partir de sintomas observables
+4. Localizar los ficheros de configuracion y logs
+   de cada componente en el sistema
+5. Distinguir las diferencias entre K3s y kubeadm
+   relevantes para el examen
+
+--------------------------------------------------
+1. VISION GENERAL DE LA ARQUITECTURA
+--------------------------------------------------
+
+Un cluster de Kubernetes tiene dos tipos de nodos:
+
+CONTROL PLANE:
+  El cerebro del cluster. Toma decisiones sobre
+  que corre donde y mantiene el estado deseado.
+  En produccion suele tener 3 o 5 nodos para alta
+  disponibilidad, pero en el examen es 1 nodo.
+
+WORKER NODES:
+  Donde corren las cargas de trabajo (tus pods).
+  Reciben instrucciones del control plane y las ejecutan.
+  Un cluster puede tener desde 1 hasta miles de workers.
+
+DIAGRAMA DE ARQUITECTURA:
+--------------------------
+
+  +--------------------------------------------------+
+  |                  CONTROL PLANE                   |
+  |                                                  |
+  |  +----------+  +-----------+  +---------------+ |
+  |  | kube-api |  | kube-     |  | kube-         | |
+  |  | server   |  | scheduler |  | controller-   | |
+  |  |          |  |           |  | manager       | |
+  |  +----+-----+  +-----+-----+  +-------+-------+ |
+  |       |              |                |          |
+  |  +----+----+         |                |          |
+  |  |  etcd   |         |                |          |
+  |  | (estado)|         |                |          |
+  |  +---------+         |                |          |
+  |       |              |                |          |
+  +-------|--------------|----------------|----------+
+          |              |                |
+          | API calls    | watch/update   | watch/update
+          |              |                |
+  +-------|--------------|----------------|----------+
+  |       |         WORKER NODE           |          |
+  |  +----+-----+                         |          |
+  |  |  kubelet |<------------------------+          |
+  |  |          |                                    |
+  |  +----+-----+                                    |
+  |       |                                          |
+  |  +----+----------+  +--------------------+       |
+  |  | container     |  | kube-proxy         |       |
+  |  | runtime       |  | (reglas de red)    |       |
+  |  | (containerd)  |  +--------------------+       |
+  |  +---------------+                               |
+  |                                                  |
+  |  +-------+  +-------+  +-------+                |
+  |  | Pod A |  | Pod B |  | Pod C |                |
+  |  +-------+  +-------+  +-------+                |
+  +--------------------------------------------------+
+
+--------------------------------------------------
+2. COMPONENTES DEL CONTROL PLANE
+--------------------------------------------------
+
+2.1 kube-apiserver
+-------------------
+
+Es el unico punto de entrada al cluster. Todo pasa
+por aqui: kubectl, otros componentes, y herramientas
+externas. Nadie escribe en etcd directamente, solo
+el apiserver.
+
+Que hace exactamente:
+  - Recibe peticiones REST (kubectl apply, get, delete)
+  - Autentica y autoriza cada peticion (RBAC)
+  - Valida que el objeto YAML tenga la estructura correcta
+  - Persiste el estado en etcd
+  - Notifica a los componentes que observan cambios
+
+Donde vive en kubeadm:
+  Static pod en /etc/kubernetes/manifests/kube-apiserver.yaml
+  Logs: kubectl logs -n kube-system kube-apiserver-<nodo>
+
+Donde vive en K3s:
+  Proceso integrado dentro del binario k3s server
+  Logs: journalctl -u k3s
+
+Puerto por defecto: 6443 (HTTPS)
+
+Verificacion:
+  curl -k https://localhost:6443/healthz
+  # esperado: ok
+
+2.2 etcd
+---------
+
+Base de datos clave-valor distribuida donde Kubernetes
+guarda TODO el estado del cluster: pods, services,
+configmaps, secrets, roles, bindings, etc.
+
+Es el componente mas critico del cluster. Si etcd
+muere o se corrompe, el cluster pierde su estado.
+Por eso el examen CKA incluye backup y restore de etcd.
+
+Que hace exactamente:
+  - Almacena el estado deseado y actual de todos los objetos
+  - Usa el protocolo Raft para consenso distribuido
+    (relevante solo en clusters de alta disponibilidad)
+  - Notifica al apiserver cuando un valor cambia (watch)
+
+Donde vive en kubeadm:
+  Static pod en /etc/kubernetes/manifests/etcd.yaml
+  Datos en /var/lib/etcd/
+  Logs: kubectl logs -n kube-system etcd-<nodo>
+
+Donde vive en K3s:
+  Reemplazado por SQLite por defecto.
+  Datos en /var/lib/rancher/k3s/server/db/
+  Esto significa que en K3s NO puedes usar etcdctl.
+  Para el examen real usaras kubeadm donde etcd es real.
+
+Verificacion en kubeadm:
+  ETCDCTL_API=3 etcdctl \
+    --endpoints=https://127.0.0.1:2379 \
+    --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+    --cert=/etc/kubernetes/pki/etcd/server.crt \
+    --key=/etc/kubernetes/pki/etcd/server.key \
+    endpoint health
+
+2.3 kube-scheduler
+-------------------
+
+Observa pods que no tienen nodo asignado y decide
+en que nodo deben correr. No ejecuta el pod, solo
+escribe el nombre del nodo en el campo spec.nodeName
+del pod. El kubelet del nodo destino hace el resto.
+
+Que hace exactamente:
+  - Filtra nodos que no cumplen los requisitos del pod
+    (recursos, taints, affinity, etc.)
+  - Puntua los nodos que si cumplen los requisitos
+  - Asigna el pod al nodo con mayor puntuacion
+
+Donde vive en kubeadm:
+  Static pod en /etc/kubernetes/manifests/kube-scheduler.yaml
+  Logs: kubectl logs -n kube-system kube-scheduler-<nodo>
+
+Sintoma de fallo:
+  Pods se quedan en estado Pending indefinidamente.
+  kubectl describe pod muestra Events vacios o
+  "no nodes available to schedule pods".
+
+2.4 kube-controller-manager
+-----------------------------
+
+Ejecuta los controladores que mantienen el estado
+deseado del cluster. Un controlador es un bucle
+que observa el estado actual, lo compara con el
+estado deseado y toma acciones para reconciliarlos.
+
+Controladores principales que incluye:
+  - Deployment controller: mantiene el numero de replicas
+  - Node controller: detecta nodos caidos
+  - Job controller: gestiona la ejecucion de Jobs
+  - ServiceAccount controller: crea SAs por defecto
+  - Endpoints controller: actualiza endpoints de services
+
+Donde vive en kubeadm:
+  Static pod en /etc/kubernetes/manifests/kube-controller-manager.yaml
+  Logs: kubectl logs -n kube-system kube-controller-manager-<nodo>
+
+Sintoma de fallo:
+  Deployments no crean pods aunque el scheduler funcione.
+  Nodos caidos no se marcan como NotReady.
+
+--------------------------------------------------
+3. COMPONENTES DEL WORKER NODE
+--------------------------------------------------
+
+3.1 kubelet
+------------
+
+El agente principal en cada nodo. Es el unico
+componente que NO corre como pod, corre directamente
+como servicio del sistema operativo.
+
+Que hace exactamente:
+  - Se registra en el apiserver como nodo disponible
+  - Observa los pods asignados a su nodo via apiserver
+  - Instruye al container runtime para arrancar/parar
+    contenedores
+  - Reporta el estado de los pods y del nodo al apiserver
+  - Ejecuta liveness y readiness probes
+  - Gestiona los static pods (ver seccion 5)
+
+Donde vive:
+  Servicio systemd en todos los nodos (kubeadm y K3s)
+  Configuracion: /var/lib/kubelet/config.yaml
+  Logs: journalctl -u kubelet -f
+
+Sintoma de fallo:
+  Nodo aparece como NotReady en kubectl get nodes.
+  Los pods del nodo dejan de reportar estado.
+
+Verificacion:
+  systemctl status kubelet
+  journalctl -u kubelet --no-pager | tail -20
+
+3.2 kube-proxy
+---------------
+
+Corre en cada nodo y mantiene las reglas de red
+que permiten que los Services funcionen.
+
+Que hace exactamente:
+  - Observa Services y Endpoints en el apiserver
+  - Traduce la IP virtual del Service (ClusterIP) en
+    reglas de iptables o ipvs que redirigen trafico
+    a los pods correspondientes
+  - No maneja trafico directamente, solo configura
+    las reglas del kernel
+
+Donde vive:
+  DaemonSet en el namespace kube-system
+  kubectl get pods -n kube-system | grep kube-proxy
+
+Sintoma de fallo:
+  Los Services no funcionan aunque los pods esten Running.
+  Conexiones a ClusterIP no llegan a los pods.
+
+3.3 container runtime
+----------------------
+
+El software que realmente ejecuta los contenedores.
+Kubernetes habla con el runtime via CRI
+(Container Runtime Interface).
+
+Runtime mas comun: containerd
+Otros: CRI-O, Docker (deprecado en versiones recientes)
+
+Verificacion:
+  crictl ps          # listar contenedores corriendo
+  crictl images      # listar imagenes en el nodo
+
+Donde vive:
+  Servicio systemd: systemctl status containerd
+
+--------------------------------------------------
+4. FLUJO COMPLETO: DEL KUBECTL AL CONTENEDOR
+--------------------------------------------------
+
+Este es el flujo que ocurre cuando ejecutas:
+kubectl apply -f deployment.yaml
+
+DIAGRAMA DEL FLUJO:
+--------------------
+
+  kubectl apply
+       |
+       | 1. HTTP POST /apis/apps/v1/namespaces/default/deployments
+       v
+  kube-apiserver
+       |
+       | 2. Autentica, autoriza, valida el objeto
+       | 3. Persiste el Deployment en etcd
+       v
+  etcd
+       |
+       | 4. Notifica cambio al apiserver (watch)
+       v
+  kube-controller-manager (Deployment controller)
+       |
+       | 5. Detecta que el Deployment necesita 3 pods
+       | 6. Crea 3 objetos Pod en etcd via apiserver
+       v
+  kube-scheduler
+       |
+       | 7. Detecta 3 pods sin nodo asignado
+       | 8. Evalua nodos disponibles
+       | 9. Asigna spec.nodeName a cada pod
+       v
+  kubelet (en el nodo asignado)
+       |
+       | 10. Detecta pod asignado a su nodo
+       | 11. Instruye a containerd para descargar imagen
+       | 12. Arranca el contenedor
+       | 13. Reporta estado Running al apiserver
+       v
+  Pod en estado Running
+
+PASO A PASO DETALLADO:
+-----------------------
+
+Paso 1 - kubectl envia la peticion:
+  kubectl serializa el YAML a JSON y hace un HTTP POST
+  al apiserver en el puerto 6443.
+
+Paso 2 - apiserver autentica la peticion:
+  Verifica el certificado o token del cliente.
+  Comprueba en RBAC si el usuario tiene permiso
+  para crear Deployments en ese namespace.
+
+Paso 3 - apiserver valida el objeto:
+  Comprueba que el YAML tiene todos los campos
+  obligatorios y que los valores son correctos.
+
+Paso 4 - apiserver persiste en etcd:
+  Guarda el objeto Deployment con estado "creado".
+
+Paso 5 - Deployment controller actua:
+  El controller-manager tiene un watch sobre Deployments.
+  Detecta el nuevo Deployment y calcula cuantos pods
+  necesita crear para cumplir spec.replicas.
+
+Paso 6 - Se crean los objetos Pod:
+  El controller crea los pods via apiserver.
+  En este momento los pods existen en etcd pero
+  no tienen nodo asignado (spec.nodeName vacio).
+
+Paso 7 - Scheduler actua:
+  El scheduler tiene un watch sobre pods sin nodeName.
+  Detecta los nuevos pods y comienza el proceso
+  de seleccion de nodo.
+
+Paso 8 - Scheduler filtra y puntua nodos:
+  Filtra nodos que no tienen recursos suficientes,
+  que tienen taints que el pod no tolera, etc.
+  Puntua los nodos restantes y elige el mejor.
+
+Paso 9 - Scheduler asigna el nodo:
+  Escribe spec.nodeName en el objeto Pod via apiserver.
+  El scheduler no hace nada mas, su trabajo termina aqui.
+
+Paso 10 - kubelet detecta el pod:
+  El kubelet de cada nodo tiene un watch sobre pods
+  donde spec.nodeName coincide con su nombre de nodo.
+  Detecta el nuevo pod asignado.
+
+Paso 11 - kubelet instruye al runtime:
+  Llama a containerd via CRI para descargar la imagen
+  si no esta en cache local.
+
+Paso 12 - containerd arranca el contenedor:
+  Descarga la imagen del registry.
+  Crea el contenedor y lo arranca.
+
+Paso 13 - kubelet reporta el estado:
+  Actualiza el estado del pod a Running en el apiserver.
+  A partir de aqui ejecuta liveness y readiness probes
+  periodicamente.
+
+--------------------------------------------------
+5. STATIC PODS
+--------------------------------------------------
+
+Los componentes del control plane en kubeadm corren
+como static pods. Este es un concepto critico para
+el examen porque aparece en troubleshooting del
+control plane.
+
+QUE ES UN STATIC POD:
+----------------------
+
+Un pod que el kubelet arranca directamente leyendo
+un fichero YAML de un directorio local, sin
+intervension del apiserver ni del scheduler.
+
+El kubelet monitoriza ese directorio y:
+  - Si aparece un fichero YAML, arranca el pod
+  - Si se modifica el fichero, reinicia el pod
+  - Si se elimina el fichero, detiene el pod
+
+DIRECTORIO DE STATIC PODS EN KUBEADM:
+---------------------------------------
+
+  /etc/kubernetes/manifests/
+
+  Contenido tipico:
+  etcd.yaml
+  kube-apiserver.yaml
+  kube-controller-manager.yaml
+  kube-scheduler.yaml
+
+COMO MODIFICAR UN COMPONENTE DEL CONTROL PLANE:
+-------------------------------------------------
+
+Para cambiar la configuracion del apiserver, por ejemplo:
+
+  vim /etc/kubernetes/manifests/kube-apiserver.yaml
+
+  El kubelet detecta el cambio y reinicia el pod
+  automaticamente en segundos.
+
+  Verificacion:
+  kubectl get pods -n kube-system | grep apiserver
+  # el pod debe reiniciarse y volver a Running
+
+POR QUE ESTO ES CRITICO EN EL EXAMEN:
+---------------------------------------
+
+El examen puede pedirte:
+  - Modificar un flag del apiserver
+  - Diagnosticar por que un componente del control plane
+    no arranca (fichero YAML corrupto en manifests/)
+  - Restaurar un componente eliminado accidentalmente
+
+NOTA SOBRE K3s:
+----------------
+
+K3s NO usa static pods para sus componentes internos.
+Todo corre dentro del proceso k3s server como goroutines.
+No hay directorio /etc/kubernetes/manifests/ en K3s.
+Para practicar static pods necesitas el entorno kubeadm.
+
+--------------------------------------------------
+6. COMUNICACION Y CERTIFICADOS
+--------------------------------------------------
+
+Todos los componentes de Kubernetes se comunican
+por HTTPS con certificados TLS mutuos (mTLS).
+Esto significa que tanto el cliente como el servidor
+presentan certificados para autenticarse.
+
+MAPA DE CERTIFICADOS EN KUBEADM:
+----------------------------------
+
+  /etc/kubernetes/pki/
+
+  Ficheros principales:
+  ca.crt / ca.key          -> CA raiz del cluster
+  apiserver.crt/.key       -> certificado del apiserver
+  apiserver-kubelet-client.crt/.key
+                           -> apiserver habla con kubelet
+  etcd/ca.crt              -> CA especifica de etcd
+  etcd/server.crt/.key     -> certificado del servidor etcd
+
+KUBECONFIG - COMO KUBECTL SE AUTENTICA:
+-----------------------------------------
+
+El fichero ~/.kube/config contiene:
+  - La URL del apiserver
+  - El certificado de cliente del usuario
+  - El certificado de la CA para verificar el servidor
+
+Ver la configuracion activa:
+  kubectl config view
+
+Ver el certificado del usuario actual:
+  kubectl config view --raw \
+    | grep client-certificate-data \
+    | awk '{print $2}' \
+    | base64 -d \
+    | openssl x509 -text -noout \
+    | grep -A2 Subject
+
+--------------------------------------------------
+7. DIFERENCIAS K3s VS KUBEADM RELEVANTES PARA EL EXAMEN
+--------------------------------------------------
+
+Esta tabla resume lo que debes tener claro cuando
+practicas en K3s pero el examen usa kubeadm.
+
+COMPONENTE        K3s                    KUBEADM
+-----------       ---                    -------
+etcd              SQLite                 etcd real
+                  no etcdctl             etcdctl disponible
+
+Control plane     proceso unico k3s      static pods en
+                  server                 /etc/kubernetes/
+                                         manifests/
+
+Certificados      en /var/lib/rancher/   en /etc/kubernetes/
+                  k3s/server/tls/        pki/
+
+kubeconfig        /etc/rancher/k3s/      /etc/kubernetes/
+                  k3s.yaml              admin.conf
+
+Logs control      journalctl -u k3s      kubectl logs -n
+plane                                    kube-system <pod>
+
+kubelet           systemd service        systemd service
+                  igual que kubeadm      igual que K3s
+
+kube-proxy        incluido en k3s        DaemonSet en
+                  o reemplazado por      kube-system
+                  flannel/traefik
+
+REGLA PRACTICA:
+----------------
+
+Para M01 a M11 (workloads, networking, storage):
+  K3s es suficiente y mas facil de operar.
+
+Para M02 (instalacion kubeadm), M03 (RBAC avanzado)
+y M12 (troubleshooting control plane):
+  Necesitas el entorno kubeadm de 2 nodos.
+
+--------------------------------------------------
+8. LABORATORIO GUIADO
+--------------------------------------------------
+
+Objetivo: mapear la arquitectura real de tu K3s
+y entender donde vive cada componente.
+
+Paso 1 - Ver los componentes del control plane:
+
+kubectl get pods -n kube-system
+
+Identifica en la salida: coredns, traefik (ingress),
+local-path-provisioner. En K3s estos reemplazan o
+complementan los componentes estandar.
+
+Paso 2 - Ver todos los nodos y su rol:
+
+kubectl get nodes -o wide
+
+La columna ROLES muestra: control-plane, worker o
+ambos (en K3s single-node es control-plane,master).
+
+Paso 3 - Inspeccionar el nodo en detalle:
+
+kubectl describe node <nombre-del-nodo>
+
+Busca estas secciones:
+  - Conditions: Ready, MemoryPressure, DiskPressure
+  - Capacity vs Allocatable: recursos totales vs disponibles
+  - System Info: version de kubelet, container runtime
+  - Allocated resources: cuanto esta en uso
+
+Paso 4 - Ver el estado del kubelet:
+
+systemctl status k3s
+# En K3s el kubelet corre dentro del proceso k3s
+
+journalctl -u k3s --no-pager | tail -30
+
+Paso 5 - Seguir el flujo completo del apartado 4:
+
+kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flujo-test
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: flujo-test
+  template:
+    metadata:
+      labels:
+        app: flujo-test
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.25
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+EOF
+
+Observar el scheduler asignando nodos:
+kubectl get pods -l app=flujo-test -o wide -w
+
+La flag -w (watch) muestra cambios en tiempo real.
+Veras la progresion: Pending -> ContainerCreating -> Running
+
+Paso 6 - Ver en que nodo corren y verificar asignacion:
+
+kubectl get pods -l app=flujo-test \
+  -o custom-columns=\
+NAME:.metadata.name,\
+NODE:.spec.nodeName,\
+STATUS:.status.phase,\
+IP:.status.podIP
+
+Paso 7 - Ver los eventos del scheduler:
+
+kubectl get events --sort-by='.lastTimestamp' | tail -10
+
+Busca eventos de tipo "Scheduled" que muestran
+la decision del scheduler.
+
+Paso 8 - Limpiar:
+
+kubectl delete deployment flujo-test
+
+--------------------------------------------------
+9. TROUBLESHOOTING - CASOS REALES
+--------------------------------------------------
+
+CASO 1: nodo en estado NotReady
+---------------------------------
+
+Sintoma:
+  kubectl get nodes muestra un nodo como NotReady.
+
+Diagnostico paso a paso:
+
+  Paso 1 - Confirmar el estado y cuanto tiempo lleva:
+  kubectl get nodes
+  kubectl describe node <nombre-nodo>
+  # buscar seccion Conditions, campo Ready
+
+  Paso 2 - Ver el motivo en los eventos del nodo:
+  kubectl describe node <nombre-nodo> | grep -A5 Conditions
+
+  Paso 3 - Verificar el kubelet en el nodo afectado:
+  # conectarse al nodo via SSH
+  ssh usuario@<ip-nodo>
+  systemctl status kubelet
+  journalctl -u kubelet --no-pager | tail -50
+
+  Causas mas comunes:
+  - kubelet detenido: systemctl start kubelet
+  - kubelet no puede contactar apiserver: problema de red
+    o certificados expirados
+  - Disco lleno: df -h, limpiar imagenes con crictl rmi
+  - Memoria agotada: el OOM killer puede matar el kubelet
+
+  Paso 4 - Verificar conectividad al apiserver:
+  curl -k https://<ip-control-plane>:6443/healthz
+
+CASO 2: pod en Pending sin razon aparente
+------------------------------------------
+
+Sintoma:
+  Un pod lleva minutos en Pending.
+  kubectl get pods muestra Pending pero no da detalles.
+
+Diagnostico paso a paso:
+
+  Paso 1 - Ver los eventos del pod:
+  kubectl describe pod <nombre>
+  # seccion Events al final, es la mas importante
+
+  Paso 2 - Interpretar los mensajes de Events:
+
+  "0/1 nodes are available: 1 Insufficient memory"
+  -> el pod pide mas memoria de la disponible
+  -> solucion: reducir resources.requests.memory
+
+  "0/1 nodes are available: 1 node(s) had taint"
+  -> el nodo tiene un taint que el pod no tolera
+  -> solucion: agregar toleracion al pod o
+     eliminar el taint del nodo
+
+  "0/1 nodes are available: 1 node(s) didn't match
+   node affinity/selector"
+  -> el nodeSelector o affinity no coincide con
+     ningun nodo disponible
+  -> solucion: corregir los labels del nodo o
+     el nodeSelector del pod
+
+  Paso 3 - Ver recursos disponibles en los nodos:
+  kubectl describe node <nombre> | grep -A5 "Allocated resources"
+
+CASO 3: componente del control plane no arranca
+------------------------------------------------
+
+Sintoma (en kubeadm):
+  kubectl get pods -n kube-system muestra el
+  kube-scheduler en CrashLoopBackOff o no aparece.
+
+Diagnostico paso a paso:
+
+  Paso 1 - Ver el estado del pod:
+  kubectl get pods -n kube-system
+  kubectl describe pod kube-scheduler-<nodo> -n kube-system
+
+  Paso 2 - Ver los logs del componente:
+  kubectl logs kube-scheduler-<nodo> -n kube-system
+
+  Si el pod no existe o no responde, ir directamente
+  a los logs del kubelet que gestiona el static pod:
+  journalctl -u kubelet | grep scheduler | tail -20
+
+  Paso 3 - Verificar el fichero de static pod:
+  cat /etc/kubernetes/manifests/kube-scheduler.yaml
+
+  Causas mas comunes:
+  - YAML corrupto (error de indentacion en el manifiesto)
+  - Flag desconocido en el comando de arranque
+  - Certificado expirado o ruta incorrecta
+  - Puerto en uso por otro proceso
+
+  Paso 4 - Reparar el manifiesto:
+  vim /etc/kubernetes/manifests/kube-scheduler.yaml
+  # corregir el error
+  # el kubelet detecta el cambio y reinicia el pod
+  # en 10-20 segundos
+
+  Verificacion:
+  kubectl get pods -n kube-system -w
+  # esperar a que el pod vuelva a Running
+
+--------------------------------------------------
+CHECKPOINT - VERIFICACION DE COMPRENSION
+--------------------------------------------------
+
+Pregunta 1:
+  Un pod lleva 5 minutos en Pending. Cual es el
+  primer componente que debes investigar y por que?
+
+Respuesta esperada:
+  El kube-scheduler. El estado Pending significa que
+  el pod existe en etcd pero no tiene nodo asignado.
+  El scheduler es el responsable de esa asignacion.
+  Si el scheduler falla, todos los pods nuevos
+  quedan en Pending indefinidamente.
+
+Pregunta 2:
+  Que diferencia hay entre un static pod y un pod
+  normal? Quien es responsable de cada uno?
+
+Respuesta esperada:
+  Un pod normal es gestionado por el apiserver y
+  el scheduler. Un static pod es gestionado
+  directamente por el kubelet, que lo arranca
+  leyendo un fichero YAML de un directorio local
+  (/etc/kubernetes/manifests/ en kubeadm).
+  Los componentes del control plane son static pods.
+
+Pregunta 3:
+  Si el apiserver deja de funcionar, que componentes
+  siguen funcionando y cuales se detienen?
+
+Respuesta esperada:
+  Siguen funcionando:
+  - Los pods que ya estan corriendo (el kubelet
+    los mantiene aunque no pueda contactar al apiserver)
+  - El container runtime (containerd)
+
+  Se detienen o degradan:
+  - kubectl (no puede conectar al apiserver)
+  - El scheduler (no puede leer ni escribir pods)
+  - El controller-manager (no puede actuar)
+  - No se pueden crear, modificar ni eliminar recursos
+
+Pregunta 4:
+  Donde estan los logs del kubelet y como los ves
+  en tiempo real?
+
+Respuesta esperada:
+  El kubelet corre como servicio systemd.
+  Sus logs estan en journald.
+  Para verlos en tiempo real:
+  journalctl -u kubelet -f
+
+Pregunta 5:
+  En K3s, como diagnosticas un problema del
+  control plane si no hay static pods?
+
+Respuesta esperada:
+  En K3s todos los componentes del control plane
+  corren dentro del proceso k3s server.
+  Los logs de todos estan en:
+  journalctl -u k3s -f
+  No hay pods individuales por componente que inspeccionar.
+
+--------------------------------------------------
+LABORATORIO CRONOMETRADO
+--------------------------------------------------
+
+OBJETIVO: completar en menos de 12 minutos.
+
+TAREA:
+
+1. Obtener el nombre exacto del container runtime
+   que usa el nodo y guardarlo en /tmp/runtime.txt
+
+2. Crear un pod llamado 'inspector' con imagen
+   nginx:1.25 en el namespace default y esperar
+   a que este Running
+
+3. Verificar en que nodo corre el pod y guardar
+   el nombre del nodo en /tmp/nodo.txt
+
+4. Obtener la IP del pod y guardarla en /tmp/pod-ip.txt
+
+5. Ver los eventos del cluster ordenados por timestamp
+   y encontrar el evento que muestra cuando el
+   scheduler asigno el pod 'inspector' a un nodo
+
+6. Eliminar el pod 'inspector' de forma inmediata
+
+CRITERIOS DE EXITO:
+
+cat /tmp/runtime.txt
+# debe contener: containerd://x.x.x o similar
+
+cat /tmp/nodo.txt
+# debe contener el nombre del nodo
+
+cat /tmp/pod-ip.txt
+# debe contener una IP en formato x.x.x.x
+
+kubectl get pod inspector 2>&1
+# debe mostrar: Error from server (NotFound)
+# confirmando que fue eliminado
+
+SOLUCION DE REFERENCIA (no mirar hasta terminar):
+
+kubectl get nodes -o custom-columns=\
+RUNTIME:.status.nodeInfo.containerRuntimeVersion \
+--no-headers > /tmp/runtime.txt
+
+kubectl run inspector --image=nginx:1.25
+kubectl wait pod inspector --for=condition=Ready \
+  --timeout=60s
+
+kubectl get pod inspector \
+  -o jsonpath='{.spec.nodeName}' > /tmp/nodo.txt
+
+kubectl get pod inspector \
+  -o jsonpath='{.status.podIP}' > /tmp/pod-ip.txt
+
+kubectl get events \
+  --sort-by='.lastTimestamp' \
+  | grep inspector
+
+kubectl delete pod inspector $now
+
+==================================================
+FIN M01 - ARQUITECTURA DE KUBERNETES
+SIGUIENTE: M02 - Instalacion y configuracion con kubeadm
+ENTORNO REQUERIDO PARA M02: kubeadm (2 nodos)
+==================================================
+

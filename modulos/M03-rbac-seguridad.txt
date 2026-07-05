@@ -1,0 +1,780 @@
+==================================================
+M03 - RBAC Y SEGURIDAD DEL CLUSTER
+==================================================
+
+MODULO: M03
+PRERREQUISITOS: M01 (arquitectura, flujo de la API)
+                M02 (kubeadm, certificados, kubeconfig)
+ENTORNO: Cluster kubeadm de 3 nodos
+         cka-cp1      control-plane  172.16.46.130
+         cka-worker1  worker         172.16.46.128
+         cka-worker2  worker         172.16.46.129
+         Kubernetes v1.35.5
+PESO EN EXAMEN: parte del 25% - Cluster Architecture,
+                Installation & Configuration
+TIEMPO ESTIMADO: 5-6 horas de practica
+
+--------------------------------------------------
+1. RESUMEN TECNICO
+--------------------------------------------------
+
+RBAC (Role-Based Access Control) es el mecanismo de
+autorizacion de Kubernetes: define quien puede hacer
+que sobre que recursos y en que ambito. Se implementa
+con cuatro objetos (Role, ClusterRole, RoleBinding,
+ClusterRoleBinding) y dos tipos de identidad (usuarios
+via certificados y ServiceAccounts). Este modulo cubre
+el flujo completo: crear una identidad, otorgarle
+permisos, construir su kubeconfig y verificar accesos.
+
+--------------------------------------------------
+2. PESO EN EL EXAMEN Y PREGUNTAS TIPICAS
+--------------------------------------------------
+
+RBAC es de las tareas mas frecuentes del dominio 25%.
+Preguntas tipicas:
+
+  - "Crea un Role que permita get, list y watch sobre
+     pods en el namespace X, y asocialo al usuario juan"
+  - "Crea un ServiceAccount con permisos para crear
+     deployments y asocialo a un pod"
+  - "Un usuario no puede listar secrets, diagnostica
+     por que y corrigelo"
+  - "Firma el CSR pendiente del usuario ana y crea
+     su kubeconfig"
+
+--------------------------------------------------
+3. PRERREQUISITOS
+--------------------------------------------------
+
+De M01 usaras: el flujo de una peticion a la API
+(authn -> authz -> admission) y el rol del apiserver.
+De M02 usaras: la CA del cluster en
+/etc/kubernetes/pki/ y la estructura de un kubeconfig.
+
+--------------------------------------------------
+4. OBJETIVOS DE APRENDIZAJE MEDIBLES
+--------------------------------------------------
+
+Al terminar este modulo seras capaz de:
+
+1. Explicar el flujo authn -> authz -> admission
+   y donde encaja RBAC
+2. Crear Roles y ClusterRoles con los verbos y
+   recursos correctos en menos de 3 minutos
+3. Distinguir cuando usar Role vs ClusterRole y
+   RoleBinding vs ClusterRoleBinding sin dudar
+4. Crear un usuario completo: clave, CSR, firma,
+   kubeconfig funcional
+5. Crear ServiceAccounts y asociarlos a pods
+6. Diagnosticar errores de permisos con
+   kubectl auth can-i y describe
+
+--------------------------------------------------
+5. EXPLICACION TEORICA PROGRESIVA
+--------------------------------------------------
+
+5.1 EL FLUJO DE SEGURIDAD DE LA API
+-------------------------------------
+
+Conexion con M01: toda peticion (kubectl, kubelet,
+controllers, pods) pasa por el apiserver. El apiserver
+la somete a tres fases en orden estricto:
+
+  FASE 1 - AUTHENTICATION (quien eres):
+    Valida la identidad. Metodos principales:
+      - Certificados X.509 (usuarios humanos)
+      - Tokens de ServiceAccount (pods/procesos)
+    Si falla: 401 Unauthorized.
+
+  FASE 2 - AUTHORIZATION (que puedes hacer):
+    Aqui vive RBAC. El apiserver evalua si la
+    identidad tiene permiso para el verbo + recurso
+    + namespace de la peticion.
+    Si falla: 403 Forbidden.
+
+  FASE 3 - ADMISSION CONTROL (se permite esta
+    operacion concreta):
+    Webhooks y controladores que pueden mutar o
+    rechazar el objeto (quotas, policies).
+    Fuera del alcance de este modulo.
+
+  REGLA CLAVE PARA DIAGNOSTICO:
+    401 = problema de identidad (certificado, token)
+    403 = problema de permisos (RBAC)
+    Distinguirlos te ahorra minutos en el examen.
+
+5.2 IDENTIDADES: USUARIOS Y SERVICEACCOUNTS
+---------------------------------------------
+
+Kubernetes NO tiene un objeto "User". No existe
+kubectl create user. Un usuario es simplemente
+cualquier identidad presentada con un certificado
+firmado por la CA del cluster:
+
+  - El campo CN (Common Name) del certificado
+    es el nombre de usuario
+  - El campo O (Organization) es el grupo
+    (puede repetirse: multiples grupos)
+
+Los ServiceAccounts SI son objetos de la API.
+Son identidades para procesos (pods, controllers):
+
+  kubectl create serviceaccount mi-sa
+
+  Cada pod puede montar el token de un SA y usarlo
+  para autenticarse contra la API desde dentro.
+
+5.3 LOS CUATRO OBJETOS DE RBAC
+--------------------------------
+
+  Role:
+    Conjunto de permisos LIMITADO a un namespace.
+    "get, list pods en el namespace desarrollo"
+
+  ClusterRole:
+    Conjunto de permisos SIN namespace. Dos usos:
+      a) Recursos cluster-wide (nodes, pv, namespaces)
+      b) Permisos reutilizables en varios namespaces
+
+  RoleBinding:
+    Asocia una identidad con un Role (o ClusterRole)
+    DENTRO de un namespace concreto.
+
+  ClusterRoleBinding:
+    Asocia una identidad con un ClusterRole en
+    TODO el cluster.
+
+  MATRIZ DE DECISION:
+
+    Permiso en UN namespace:
+      Role + RoleBinding
+
+    Mismo permiso en VARIOS namespaces:
+      ClusterRole + un RoleBinding por namespace
+      (el RoleBinding puede referenciar un ClusterRole;
+       el permiso queda limitado al namespace del
+       binding. Patron muy comun en el examen)
+
+    Permiso sobre recursos cluster-wide o en todos
+    los namespaces:
+      ClusterRole + ClusterRoleBinding
+
+5.4 ANATOMIA DE UNA REGLA
+---------------------------
+
+Toda regla RBAC tiene tres partes:
+
+  apiGroups: a que grupo de API pertenece el recurso
+    ""           -> core (pods, services, secrets,
+                    configmaps, serviceaccounts)
+    "apps"       -> deployments, daemonsets,
+                    statefulsets, replicasets
+    "batch"      -> jobs, cronjobs
+    "networking.k8s.io" -> networkpolicies, ingresses
+    "rbac.authorization.k8s.io" -> roles, bindings
+
+  resources: el tipo de recurso en plural y minuscula
+    pods, deployments, secrets, nodes...
+    Subrecursos con /: pods/log, pods/exec
+
+  verbs: las acciones permitidas
+    get, list, watch          -> lectura
+    create, update, patch     -> escritura
+    delete, deletecollection  -> borrado
+    * -> todos (evitar salvo que la tarea lo pida)
+
+  COMO DESCUBRIR EL apiGroup SIN MEMORIZAR
+  (conexion con M00, kubectl explain):
+
+    kubectl api-resources | grep deployment
+    # NAME         APIVERSION   NAMESPACED   KIND
+    # deployments  apps/v1      true         Deployment
+    # apiVersion apps/v1 -> apiGroup es "apps"
+    # apiVersion v1 (sin grupo) -> apiGroup es ""
+
+--------------------------------------------------
+6. DIAGRAMA ASCII - FLUJO DE UNA PETICION
+--------------------------------------------------
+
+  kubectl get pods -n desarrollo
+  (certificado con CN=juan, O=dev-team)
+       |
+       v
+  +---------------------------------------------+
+  |              KUBE-APISERVER                 |
+  |                                             |
+  |  1. AUTHENTICATION                          |
+  |     Certificado firmado por la CA?          |
+  |     SI -> identidad: user=juan,             |
+  |           groups=[dev-team]                 |
+  |     NO -> 401 Unauthorized (FIN)            |
+  |                |                            |
+  |                v                            |
+  |  2. AUTHORIZATION (RBAC)                    |
+  |     Existe algun binding que asocie a       |
+  |     juan (o a dev-team) con un Role/        |
+  |     ClusterRole que permita:                |
+  |       verbo=list, recurso=pods,             |
+  |       namespace=desarrollo?                 |
+  |     SI -> continua                          |
+  |     NO -> 403 Forbidden (FIN)               |
+  |                |                            |
+  |                v                            |
+  |  3. ADMISSION CONTROL                       |
+  |     (no aplica a lecturas simples)          |
+  +----------------|----------------------------+
+                   v
+              etcd (lectura)
+                   |
+                   v
+              respuesta: lista de pods
+
+--------------------------------------------------
+7. EJEMPLOS PRACTICOS DESPLEGABLES
+--------------------------------------------------
+
+Preparacion:
+
+kubectl create namespace desarrollo
+
+7.1 ROLE + ROLEBINDING PARA UN USUARIO
+----------------------------------------
+
+kubectl apply -f - <<'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pod-reader
+  namespace: desarrollo
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get"]
+EOF
+
+kubectl apply -f - <<'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pod-reader-juan
+  namespace: desarrollo
+subjects:
+- kind: User
+  name: juan
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: pod-reader
+  apiGroup: rbac.authorization.k8s.io
+EOF
+
+Verificacion inmediata (sin necesitar el usuario real):
+
+kubectl auth can-i list pods \
+  --as=juan -n desarrollo
+# esperado: yes
+
+kubectl auth can-i delete pods \
+  --as=juan -n desarrollo
+# esperado: no
+
+kubectl auth can-i list pods \
+  --as=juan -n default
+# esperado: no (el Role es del namespace desarrollo)
+
+NOTA: roleRef es INMUTABLE. Si te equivocas de Role
+en un binding, no puedes editarlo: borras y recreas
+el binding. Detalle que el examen explota.
+
+Version imperativa (mas rapida en el examen):
+
+kubectl create role pod-reader \
+  --verb=get,list,watch \
+  --resource=pods,pods/log \
+  -n desarrollo $do
+
+kubectl create rolebinding pod-reader-juan \
+  --role=pod-reader \
+  --user=juan \
+  -n desarrollo $do
+
+7.2 CLUSTERROLE REUTILIZADO EN UN NAMESPACE
+---------------------------------------------
+
+Patron de examen: un ClusterRole generico, limitado
+a un namespace via RoleBinding.
+
+kubectl apply -f - <<'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: deployment-manager
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "create", "update", "patch"]
+EOF
+
+kubectl apply -f - <<'EOF'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: deploy-mgr-ana
+  namespace: desarrollo
+subjects:
+- kind: User
+  name: ana
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: deployment-manager
+  apiGroup: rbac.authorization.k8s.io
+EOF
+
+kubectl auth can-i create deployments \
+  --as=ana -n desarrollo
+# esperado: yes
+
+kubectl auth can-i create deployments \
+  --as=ana -n default
+# esperado: no
+# El ClusterRole NO da acceso global: el RoleBinding
+# lo limita al namespace desarrollo.
+
+7.3 SERVICEACCOUNT CON PERMISOS, MONTADO EN UN POD
+----------------------------------------------------
+
+kubectl create serviceaccount app-sa -n desarrollo
+
+kubectl create role cm-reader \
+  --verb=get,list \
+  --resource=configmaps \
+  -n desarrollo
+
+kubectl create rolebinding cm-reader-app-sa \
+  --role=cm-reader \
+  --serviceaccount=desarrollo:app-sa \
+  -n desarrollo
+
+NOTA sobre el formato del subject:
+  --serviceaccount=NAMESPACE:NOMBRE
+  En YAML el subject es:
+    kind: ServiceAccount
+    name: app-sa
+    namespace: desarrollo
+  (sin apiGroup, a diferencia de User)
+
+Pod que usa el ServiceAccount:
+
+kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sa-test
+  namespace: desarrollo
+spec:
+  serviceAccountName: app-sa
+  containers:
+  - name: main
+    image: curlimages/curl
+    command: ["sh", "-c", "sleep 3600"]
+EOF
+
+Probar los permisos DESDE DENTRO del pod contra
+la API (patron que aparece en el examen):
+
+kubectl exec -n desarrollo sa-test -- sh -c '
+TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+CACERT=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+curl -s --cacert $CACERT \
+  -H "Authorization: Bearer $TOKEN" \
+  https://kubernetes.default.svc/api/v1/namespaces/desarrollo/configmaps'
+# esperado: JSON con la lista de configmaps (200)
+
+kubectl exec -n desarrollo sa-test -- sh -c '
+TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+CACERT=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+curl -s --cacert $CACERT \
+  -H "Authorization: Bearer $TOKEN" \
+  https://kubernetes.default.svc/api/v1/namespaces/desarrollo/secrets'
+# esperado: 403 Forbidden (el SA no tiene permiso
+# sobre secrets)
+
+Verificacion rapida sin entrar al pod:
+
+kubectl auth can-i list configmaps \
+  --as=system:serviceaccount:desarrollo:app-sa \
+  -n desarrollo
+# esperado: yes
+# Formato de identidad de un SA:
+# system:serviceaccount:<namespace>:<nombre>
+
+--------------------------------------------------
+8. LABORATORIO GUIADO - CREAR UN USUARIO COMPLETO
+--------------------------------------------------
+
+Objetivo: crear el usuario "maria" con acceso de
+lectura a pods en desarrollo, desde la clave privada
+hasta un kubeconfig funcional. Este flujo completo
+es materia de examen.
+
+Conexion con M02: usaremos la CA del cluster que
+kubeadm creo en /etc/kubernetes/pki/. Todo se
+ejecuta en cka-cp1.
+
+Paso 1 - Generar clave privada y CSR de maria:
+
+openssl genrsa -out maria.key 2048
+
+openssl req -new -key maria.key \
+  -subj "/CN=maria/O=dev-team" \
+  -out maria.csr
+
+# CN=maria      -> nombre de usuario
+# O=dev-team    -> grupo
+
+Paso 2 - Enviar el CSR a Kubernetes para su firma:
+
+El objeto CertificateSigningRequest espera el CSR
+en base64 sin saltos de linea:
+
+CSR_B64=$(cat maria.csr | base64 | tr -d '\n')
+
+kubectl apply -f - <<EOF
+apiVersion: certificates.k8s.io/v1
+kind: CertificateSigningRequest
+metadata:
+  name: maria
+spec:
+  request: ${CSR_B64}
+  signerName: kubernetes.io/kube-apiserver-client
+  expirationSeconds: 86400
+  usages:
+  - client auth
+EOF
+
+NOTA: este heredoc usa EOF sin comillas a proposito,
+para que bash expanda ${CSR_B64}. Es la excepcion a
+la regla de <<'EOF' de este curso.
+
+Paso 3 - Aprobar el CSR:
+
+kubectl get csr
+# maria   Pending
+
+kubectl certificate approve maria
+
+kubectl get csr
+# maria   Approved,Issued
+
+Paso 4 - Extraer el certificado firmado:
+
+kubectl get csr maria \
+  -o jsonpath='{.status.certificate}' \
+  | base64 -d > maria.crt
+
+Verificar el contenido del certificado:
+
+openssl x509 -in maria.crt -noout -subject
+# esperado: subject=O=dev-team, CN=maria
+
+Paso 5 - Dar permisos a maria:
+
+kubectl create rolebinding pod-reader-maria \
+  --role=pod-reader \
+  --user=maria \
+  -n desarrollo
+# reutiliza el Role pod-reader del ejemplo 7.1
+
+Paso 6 - Construir el kubeconfig de maria:
+
+kubectl config set-cluster kubernetes \
+  --server=https://172.16.46.130:6443 \
+  --certificate-authority=/etc/kubernetes/pki/ca.crt \
+  --embed-certs=true \
+  --kubeconfig=maria.kubeconfig
+
+kubectl config set-credentials maria \
+  --client-certificate=maria.crt \
+  --client-key=maria.key \
+  --embed-certs=true \
+  --kubeconfig=maria.kubeconfig
+
+kubectl config set-context maria@kubernetes \
+  --cluster=kubernetes \
+  --user=maria \
+  --namespace=desarrollo \
+  --kubeconfig=maria.kubeconfig
+
+kubectl config use-context maria@kubernetes \
+  --kubeconfig=maria.kubeconfig
+
+Paso 7 - Probar el kubeconfig:
+
+kubectl --kubeconfig=maria.kubeconfig get pods
+# esperado: lista de pods de desarrollo
+# (o "No resources found in desarrollo namespace")
+
+kubectl --kubeconfig=maria.kubeconfig get pods -n default
+# esperado: Error ... forbidden (403)
+
+kubectl --kubeconfig=maria.kubeconfig delete pod sa-test
+# esperado: Error ... forbidden (403)
+
+El 403 en los dos ultimos confirma que la
+autenticacion funciona (no es 401) y que RBAC
+limita correctamente.
+
+--------------------------------------------------
+9. CHECKPOINT
+--------------------------------------------------
+
+Pregunta 1:
+  Un usuario recibe 401 al ejecutar kubectl get pods.
+  Otro recibe 403. Cual es el problema de cada uno?
+
+Respuesta:
+  401 = autenticacion fallida: certificado invalido,
+  expirado o no firmado por la CA del cluster.
+  403 = autenticado correctamente pero sin permisos
+  RBAC para esa operacion.
+
+Pregunta 2:
+  Necesitas dar permiso de lectura de secrets al
+  usuario leo en los namespaces app1, app2 y app3.
+  Que objetos creas?
+
+Respuesta:
+  Un ClusterRole (secret-reader) y tres RoleBindings,
+  uno por namespace, todos referenciando el mismo
+  ClusterRole. No un ClusterRoleBinding (daria acceso
+  en todos los namespaces del cluster).
+
+Pregunta 3:
+  Como verificas si el ServiceAccount app-sa del
+  namespace desarrollo puede crear deployments ahi?
+
+Respuesta:
+  kubectl auth can-i create deployments \
+    --as=system:serviceaccount:desarrollo:app-sa \
+    -n desarrollo
+
+Pregunta 4:
+  Creaste un RoleBinding apuntando al Role equivocado.
+  Puedes corregirlo con kubectl edit?
+
+Respuesta:
+  No. El campo roleRef es inmutable. Hay que borrar
+  el binding y recrearlo con el Role correcto.
+
+Pregunta 5:
+  En que campo del certificado va el nombre de
+  usuario y en cual el grupo?
+
+Respuesta:
+  CN (Common Name) = usuario.
+  O (Organization) = grupo.
+
+--------------------------------------------------
+10. LABORATORIO CRONOMETRADO
+--------------------------------------------------
+
+OBJETIVO: completar en menos de 12 minutos.
+
+TAREA:
+1. Crea el namespace 'rbac-lab'
+2. Crea el ServiceAccount 'ci-bot' en rbac-lab
+3. Crea un Role 'ci-role' en rbac-lab que permita:
+   get, list, create y delete sobre pods
+   get y list sobre configmaps
+4. Asocia ci-role al ServiceAccount ci-bot
+5. Crea un ClusterRole 'node-viewer' que permita
+   get y list sobre nodes
+6. Da a ci-bot el permiso node-viewer a nivel cluster
+7. Guarda el resultado de verificar si ci-bot puede
+   borrar pods en rbac-lab en /tmp/rbac1.txt
+8. Guarda el resultado de verificar si ci-bot puede
+   borrar nodes en /tmp/rbac2.txt
+
+CRITERIOS DE EXITO:
+
+kubectl auth can-i delete pods \
+  --as=system:serviceaccount:rbac-lab:ci-bot -n rbac-lab
+# yes
+
+kubectl auth can-i list nodes \
+  --as=system:serviceaccount:rbac-lab:ci-bot
+# yes
+
+cat /tmp/rbac1.txt
+# yes
+
+cat /tmp/rbac2.txt
+# no
+
+SOLUCION DE REFERENCIA (no mirar hasta terminar):
+
+kubectl create namespace rbac-lab
+
+kubectl create serviceaccount ci-bot -n rbac-lab
+
+kubectl create role ci-role \
+  --verb=get,list,create,delete --resource=pods \
+  -n rbac-lab
+
+kubectl patch role ci-role -n rbac-lab --type='json' \
+  -p='[{"op":"add","path":"/rules/-","value":{"apiGroups":[""],"resources":["configmaps"],"verbs":["get","list"]}}]'
+# alternativa: crear el Role con YAML y las dos
+# reglas desde el inicio, suele ser mas rapido
+
+kubectl create rolebinding ci-role-bot \
+  --role=ci-role \
+  --serviceaccount=rbac-lab:ci-bot \
+  -n rbac-lab
+
+kubectl create clusterrole node-viewer \
+  --verb=get,list --resource=nodes
+
+kubectl create clusterrolebinding node-viewer-bot \
+  --clusterrole=node-viewer \
+  --serviceaccount=rbac-lab:ci-bot
+
+kubectl auth can-i delete pods \
+  --as=system:serviceaccount:rbac-lab:ci-bot \
+  -n rbac-lab > /tmp/rbac1.txt
+
+kubectl auth can-i delete nodes \
+  --as=system:serviceaccount:rbac-lab:ci-bot \
+  > /tmp/rbac2.txt
+
+--------------------------------------------------
+11. TROUBLESHOOTING - CASOS REALES
+--------------------------------------------------
+
+CASO 1: "yes" en auth can-i pero 403 en la practica
+-----------------------------------------------------
+
+Sintoma:
+  kubectl auth can-i list pods --as=juan -n desarrollo
+  devuelve yes, pero juan recibe 403 al ejecutarlo.
+
+Diagnostico:
+  El 403 real incluye la identidad evaluada. Leela:
+  Error from server (Forbidden): pods is forbidden:
+  User "Juan" cannot list resource "pods"...
+                ^^^^
+  El certificado dice CN=Juan (mayuscula) y el
+  binding dice juan. RBAC es case-sensitive.
+
+  Verificar la identidad real del certificado:
+  openssl x509 -in juan.crt -noout -subject
+
+Solucion:
+  Corregir el subject del binding (borrar y recrear)
+  o regenerar el certificado con el CN correcto.
+
+CASO 2: ServiceAccount recibe 403 pese al binding
+---------------------------------------------------
+
+Sintoma:
+  El pod con serviceAccountName: app-sa recibe 403
+  aunque el RoleBinding existe.
+
+Diagnostico paso a paso:
+
+  1. Verificar el binding y sus subjects:
+     kubectl describe rolebinding -n desarrollo
+     # revisar: kind=ServiceAccount, name correcto,
+     # y SOBRE TODO el campo namespace del subject
+
+  2. Error tipico: el subject dice
+     namespace: default en lugar de
+     namespace: desarrollo. Un SA se identifica
+     como system:serviceaccount:NS:NOMBRE; si el
+     namespace del subject no coincide, es OTRA
+     identidad.
+
+  3. Confirmar con la identidad exacta:
+     kubectl auth can-i get configmaps \
+       --as=system:serviceaccount:desarrollo:app-sa \
+       -n desarrollo
+
+  4. Verificar que el pod usa el SA correcto:
+     kubectl get pod sa-test -n desarrollo \
+       -o jsonpath='{.spec.serviceAccountName}'
+
+Solucion:
+  Corregir el namespace del subject en el binding
+  (borrar y recrear) o el serviceAccountName del pod.
+
+CASO 3: Role correcto pero el recurso tiene apiGroup
+------------------------------------------------------
+
+Sintoma:
+  Role permite get,list sobre deployments pero el
+  usuario recibe 403 al listar deployments.
+
+Diagnostico:
+  kubectl get role dev-role -n desarrollo -o yaml
+  # rules:
+  # - apiGroups: [""]        <- AQUI EL ERROR
+  #   resources: ["deployments"]
+
+  Deployments pertenece al grupo "apps", no al core.
+  Con apiGroups: [""] la regla aplica a un recurso
+  "deployments" del core que no existe.
+
+  Confirmar el grupo correcto:
+  kubectl api-resources | grep deployments
+  # deployments  apps/v1  ...
+
+Solucion:
+  kubectl edit role dev-role -n desarrollo
+  # cambiar apiGroups: [""] por apiGroups: ["apps"]
+  # (las rules SI son editables, a diferencia
+  #  del roleRef de los bindings)
+
+Verificacion:
+  kubectl auth can-i list deployments \
+    --as=usuario -n desarrollo
+  # yes
+
+--------------------------------------------------
+12. ENTORNO REQUERIDO
+--------------------------------------------------
+
+Entorno principal: cluster kubeadm de 3 nodos.
+Todo el modulo se ejecuta desde cka-cp1 (necesitas
+acceso a /etc/kubernetes/pki/ para el kubeconfig
+del laboratorio guiado).
+
+ALTERNATIVA K3S (plan B):
+  Todo el RBAC funciona identico (es API estandar).
+  Diferencias:
+    - La CA no esta en /etc/kubernetes/pki/ sino en
+      /var/lib/rancher/k3s/server/tls/
+      (client-ca.crt / client-ca.key para firmar,
+       server-ca.crt para el kubeconfig)
+    - El kubeconfig admin es
+      /etc/rancher/k3s/k3s.yaml
+  El flujo de CSR via la API de Kubernetes (paso 2
+  del lab guiado) funciona igual y es el recomendado
+  tambien en K3s.
+
+LIMPIEZA DEL MODULO:
+
+kubectl delete namespace desarrollo rbac-lab
+kubectl delete clusterrole deployment-manager node-viewer
+kubectl delete clusterrolebinding node-viewer-bot
+kubectl delete csr maria
+rm -f maria.key maria.csr maria.crt maria.kubeconfig
+
+==================================================
+FIN M03 - RBAC Y SEGURIDAD DEL CLUSTER
+SIGUIENTE: M03b - HELM, KUSTOMIZE, CRDS, OPERATORS
+           Y EXTENSION INTERFACES
+==================================================

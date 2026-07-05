@@ -1,0 +1,1110 @@
+==================================================
+M02 - INSTALACION Y CONFIGURACION CON KUBEADM
+==================================================
+
+MODULO: M02
+PRERREQUISITOS: M01 (Arquitectura de Kubernetes)
+ENTORNO: kubeadm - 1 control plane + 2 workers
+         cka-cp1 (172.16.46.130)
+         cka-worker1 (172.16.46.128)
+         cka-worker2 (172.16.46.129)
+PESO EN EXAMEN: 25% - Cluster Architecture,
+                Installation & Configuration
+TIEMPO ESTIMADO: 6-8 horas de practica
+
+--------------------------------------------------
+RESUMEN TECNICO
+--------------------------------------------------
+
+Este modulo cubre el ciclo de vida completo de un
+cluster Kubernetes gestionado con kubeadm: desde
+la preparacion del sistema operativo hasta el
+upgrade entre versiones menores.
+
+kubeadm es la herramienta oficial para bootstrapping
+de clusters Kubernetes. Automatiza la configuracion
+de certificados TLS, static pods del control plane,
+RBAC inicial y la union de nodos worker.
+
+En el examen CKA apareceran tareas de:
+  - etcd backup y restore
+  - upgrade de control plane y workers
+  - inspeccion de certificados
+  - static pods
+
+--------------------------------------------------
+PESO EN EL EXAMEN Y PREGUNTAS TIPICAS
+--------------------------------------------------
+
+25% del examen. Preguntas tipicas:
+
+  - "Realiza un backup de etcd y guardalo en /opt/etcd-backup.db"
+  - "Restaura etcd desde el snapshot /opt/etcd-backup.db"
+  - "Upgradea el control plane de v1.35 a v1.36"
+  - "Upgradea el worker cka-worker1 a v1.36"
+  - "El cluster tiene un static pod roto, corrígelo"
+
+--------------------------------------------------
+PRERREQUISITOS DEL SISTEMA OPERATIVO
+--------------------------------------------------
+
+Antes de instalar cualquier componente de Kubernetes,
+el sistema operativo debe estar correctamente
+configurado. Estos pasos aplican a los 3 nodos.
+
+Conexion de M01: en arquitectura vimos que kubelet
+y kube-proxy necesitan que el kernel reenvie trafico
+entre interfaces de red. Estos parametros lo habilitan.
+
+PASO 1 - MODULOS DE KERNEL [CP+W]
+-----------------------------------
+
+Los modulos overlay y br_netfilter son requeridos
+por containerd y por el networking de Kubernetes.
+
+  overlay:      permite a containerd usar overlayfs
+                como storage driver para las capas
+                de las imagenes de contenedor
+  br_netfilter: permite que iptables inspeccione
+                trafico que pasa por bridges de red
+                necesario para NetworkPolicy y kube-proxy
+
+cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+EOF
+
+sudo modprobe overlay
+sudo modprobe br_netfilter
+
+Verificacion:
+lsmod | grep overlay
+lsmod | grep br_netfilter
+# ambos deben aparecer en la salida
+
+PASO 2 - PARAMETROS SYSCTL [CP+W]
+-----------------------------------
+
+Estos parametros permiten que iptables procese
+trafico de red de los pods correctamente:
+
+  bridge-nf-call-iptables:  trafico IPv4 en bridges
+                             pasa por iptables
+  bridge-nf-call-ip6tables: mismo para IPv6
+  ip_forward:               permite al nodo reenviar
+                             paquetes entre interfaces
+                             necesario para pod-to-pod
+
+cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-iptables = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward = 1
+EOF
+
+sudo sysctl --system
+
+Validacion:
+sysctl net.bridge.bridge-nf-call-iptables
+sysctl net.bridge.bridge-nf-call-ip6tables
+sysctl net.ipv4.ip_forward
+# resultado esperado en los 3:
+# net.bridge.bridge-nf-call-iptables = 1
+# net.bridge.bridge-nf-call-ip6tables = 1
+# net.ipv4.ip_forward = 1
+
+--------------------------------------------------
+INSTALACION DE CONTAINERD Y KUBETOOLS
+--------------------------------------------------
+
+Para replicar el entorno del examen CKA se usan
+dos scripts que automatizan la instalacion:
+
+setup-container.sh:
+  - Instala containerd desde GitHub releases
+  - Configura SystemdCgroup = true en containerd
+    (obligatorio para que kubelet funcione)
+  - Instala runc desde opencontainers
+  - Aplica fix de apparmor especifico de Ubuntu 24.04
+  - Instala crictl para inspeccion directa de
+    contenedores sin pasar por kubectl
+  - Crea /tmp/container.txt como flag de control
+
+setup-kubetools-previousversion.sh:
+  - Verifica que setup-container.sh fue ejecutado
+  - Detecta la version latest de Kubernetes
+  - Instala automaticamente la version N-1
+    (si latest es 1.36, instala 1.35)
+  - Instala kubelet, kubeadm, kubectl
+  - Marca los paquetes con apt-mark hold para
+    evitar actualizaciones accidentales
+  - Deshabilita swap (requerido por kubelet)
+  - Configura crictl para usar el socket de containerd
+
+Ejecutar en los 3 nodos en este orden:
+
+  chmod +x setup-container.sh
+  chmod +x setup-kubetools-previousversion.sh
+
+  sudo ./setup-container.sh
+  sudo ./setup-kubetools-previousversion.sh
+
+Verificacion tras ejecutar los scripts:
+
+  sudo systemctl status containerd
+  # esperado: active (running)
+
+  kubeadm version
+  kubelet --version
+  kubectl version --client
+  # los tres deben mostrar la misma version v1.35.x
+
+  crictl version
+  # esperado: crictl version vX.X.X
+
+  sudo swapon --show
+  # esperado: sin output (swap desactivado)
+
+NOTA SOBRE apt-mark hold:
+  Los paquetes marcados con hold no se actualizan
+  con apt upgrade. Critico en el examen: una
+  actualizacion accidental durante el upgrade
+  saltaria versiones y romperia el proceso.
+
+  Verificar que estan marcados:
+  apt-mark showhold
+  # esperado: kubelet kubeadm kubectl
+
+--------------------------------------------------
+INICIALIZACION DEL CLUSTER CON KUBEADM
+--------------------------------------------------
+
+COMO FUNCIONA KUBEADM INIT INTERNAMENTE:
+-----------------------------------------
+
+Conexion con M01: en arquitectura vimos los
+componentes del control plane. kubeadm init
+los despliega en este orden exacto:
+
+  1. Preflight checks
+     Verifica que el sistema cumple los requisitos:
+     swap desactivado, puertos libres, containerd
+     corriendo, permisos de root, etc.
+
+  2. Genera la CA (Certificate Authority)
+     Crea los certificados TLS en /etc/kubernetes/pki/
+     Cada componente tiene su propio certificado
+     firmado por esta CA.
+
+  3. Genera kubeconfig files
+     /etc/kubernetes/admin.conf     (kubectl admin)
+     /etc/kubernetes/kubelet.conf   (kubelet del CP)
+     /etc/kubernetes/scheduler.conf (kube-scheduler)
+     /etc/kubernetes/controller-manager.conf
+
+  4. Despliega los static pods del control plane
+     /etc/kubernetes/manifests/etcd.yaml
+     /etc/kubernetes/manifests/kube-apiserver.yaml
+     /etc/kubernetes/manifests/kube-controller-manager.yaml
+     /etc/kubernetes/manifests/kube-scheduler.yaml
+
+     Estos ficheros son leidos directamente por kubelet.
+     No necesitan kubectl ni la API para arrancar.
+     Por eso el control plane puede inicializarse
+     sin un cluster previo.
+
+  5. Espera a que la API este disponible
+     Hace polling hasta que kube-apiserver responde.
+
+  6. Configura RBAC inicial
+     Crea los ClusterRoles y ClusterRoleBindings
+     necesarios para el funcionamiento del cluster.
+
+  7. Genera el token de bootstrap
+     Para que los workers puedan unirse de forma segura.
+
+  8. Instala kube-proxy y CoreDNS como addons
+     Como pods normales via la API ya operativa.
+
+EJECUTAR EN cka-cp1 UNICAMENTE:
+---------------------------------
+
+  sudo kubeadm init
+
+GUARDAR TODA LA SALIDA. Incluye el kubeadm join
+que necesitaras para los workers.
+
+Configurar kubectl tras el init:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Verificacion:
+
+  kubectl get nodes
+  # esperado: cka-cp1   NotReady   control-plane
+  # NotReady es correcto, aun no hay CNI instalado
+
+  kubectl get pods -n kube-system
+  # etcd, apiserver, controller-manager, scheduler
+  # deben estar Running
+  # coredns estara Pending hasta instalar el CNI
+
+--------------------------------------------------
+INSTALACION DE CALICO (CNI)
+--------------------------------------------------
+
+POR QUE SE INSTALA DESPUES DE KUBEADM INIT:
+---------------------------------------------
+
+Calico necesita la API de Kubernetes activa para
+instalarse via kubectl. Sin kubeadm init previo
+no hay API y kubectl no tiene a donde conectarse.
+
+COMO FUNCIONA CALICO INTERNAMENTE:
+------------------------------------
+
+Conexion con M01: en arquitectura vimos que los
+pods necesitan una red para comunicarse entre nodos.
+El CNI es el componente que la provee.
+
+Calico despliega en cada nodo:
+  calico-node (DaemonSet):
+    - Gestiona las rutas de red del nodo
+    - Programa las reglas de iptables para pods
+    - Implementa NetworkPolicy
+
+  calico-kube-controllers (Deployment):
+    - Sincroniza el estado de Calico con la API
+    - Gestiona el ciclo de vida de los recursos
+
+INSTALAR EN cka-cp1:
+
+  kubectl apply -f \
+    https://docs.projectcalico.org/manifests/calico.yaml
+
+Verificar que Calico esta operativo:
+
+  watch kubectl get pods -n kube-system
+  # esperar hasta que calico-node y
+  # calico-kube-controllers esten Running
+  # coredns pasara a Running cuando Calico este listo
+  # Ctrl+C para salir
+
+  kubectl get nodes
+  # esperado: cka-cp1   Ready   control-plane
+
+--------------------------------------------------
+UNION DE WORKERS AL CLUSTER
+--------------------------------------------------
+
+COMO FUNCIONA KUBEADM JOIN INTERNAMENTE:
+------------------------------------------
+
+  1. El worker contacta al API server del CP
+     usando el token de bootstrap generado en el init
+
+  2. El API server valida el token y devuelve
+     la informacion del cluster (CA, endpoint)
+
+  3. El worker genera su propio certificado kubelet
+     firmado por la CA del cluster
+
+  4. kubelet en el worker se registra en la API
+     como un nuevo Node object
+
+  5. El scheduler puede ahora asignar pods al worker
+
+EJECUTAR EN cka-worker1 Y cka-worker2:
+
+  El comando exacto lo obtienes de la salida de
+  kubeadm init. Tiene esta forma:
+
+  sudo kubeadm join 172.16.46.130:6443 \
+    --token <token> \
+    --discovery-token-ca-cert-hash sha256:<hash>
+
+  Si perdiste la salida de kubeadm init:
+  kubeadm token create --print-join-command
+
+Verificacion desde cka-cp1 tras unir ambos workers:
+
+  kubectl get nodes -o wide
+  # esperado:
+  # NAME          STATUS   ROLES           VERSION
+  # cka-cp1       Ready    control-plane   v1.35.5
+  # cka-worker1   Ready    <none>          v1.35.5
+  # cka-worker2   Ready    <none>          v1.35.5
+
+  kubectl get pods -A
+  # todos los pods deben estar Running
+
+--------------------------------------------------
+INSPECCION DE COMPONENTES DEL CONTROL PLANE
+--------------------------------------------------
+
+Esta seccion conecta directamente con M01.
+Ahora que el cluster esta corriendo, inspeccionamos
+los componentes que estudiamos en arquitectura.
+
+STATIC PODS - DONDE VIVEN LOS COMPONENTES:
+--------------------------------------------
+
+Los componentes del control plane corren como
+static pods. kubelet los lee directamente desde:
+
+  ls /etc/kubernetes/manifests/
+  # etcd.yaml
+  # kube-apiserver.yaml
+  # kube-controller-manager.yaml
+  # kube-scheduler.yaml
+
+Ver el manifiesto del apiserver:
+  sudo cat /etc/kubernetes/manifests/kube-apiserver.yaml
+
+Observa los flags de arranque del apiserver.
+Son criticos para troubleshooting en el examen:
+  --advertise-address     IP del control plane
+  --etcd-servers          donde esta etcd
+  --service-cluster-ip-range  CIDR de services
+  --cluster-cidr          CIDR de pods
+
+INSPECCION DE CERTIFICADOS:
+-----------------------------
+
+kubeadm gestiona todos los certificados en:
+  ls /etc/kubernetes/pki/
+
+  ca.crt / ca.key          CA raiz del cluster
+  apiserver.crt            certificado del apiserver
+  apiserver-kubelet-client certificado para hablar
+                           con kubelet
+  etcd/                    certificados de etcd
+
+Ver cuando expira un certificado:
+  sudo kubeadm certs check-expiration
+
+  Muestra la fecha de expiracion de cada certificado.
+  Los certificados de kubeadm expiran en 1 año.
+  En el examen puede aparecer una tarea de renovacion.
+
+Renovar todos los certificados:
+  sudo kubeadm certs renew all
+
+INSPECCION DE KUBECONFIG:
+---------------------------
+
+  ls /etc/kubernetes/
+  # admin.conf
+  # kubelet.conf
+  # controller-manager.conf
+  # scheduler.conf
+
+  kubectl config view
+  # muestra el kubeconfig activo
+
+  kubectl config get-contexts
+  # muestra los contextos disponibles
+
+--------------------------------------------------
+ETCD - BACKUP Y RESTORE
+--------------------------------------------------
+
+IMPORTANCIA EN EL EXAMEN:
+---------------------------
+
+El backup y restore de etcd es una de las tareas
+mas frecuentes y con mayor peso en el examen CKA.
+Aparece en practicamente todos los examenes.
+
+Debes poder ejecutarlo en menos de 5 minutos.
+
+QUE ES ETCD Y POR QUE SE HACE BACKUP:
+----------------------------------------
+
+Conexion con M01: etcd es la base de datos del
+cluster. Todo el estado de Kubernetes vive ahi:
+pods, deployments, services, secrets, configmaps,
+RBAC, etc.
+
+Si etcd se corrompe o pierde datos, el cluster
+pierde todo su estado. No hay pods, no hay nada.
+El backup permite restaurar ese estado.
+
+
+PASOS DEL CURSO:
+======================
+sudo apt install etcd-client
+sudo etcdctl --help; sudo ETCDCTL_API=3 etcdctl --help
+ps aux | grep etcd
+
+Test API access:
+sudo ETCDCTL_API=3 etcdctl \
+  --endpoints=https://127.0.0.1:2379 \
+  --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+  --cert=/etc/kubernetes/pki/etcd/server.crt \
+  --key=/etc/kubernetes/pki/etcd/server.key \
+  get / --prefix --keys-only
+
+Make the backup: sudo ETCDCTL_API=3 etcdctl --endpoints=localhost:2379 --cacert /etc/kubernetes/pki/etcd/ca.crt --cert
+/etc/kubernetes/pki/etcd/server.crt --key
+/etc/kubernetes/pki/etcd/server.key snapshot save /tmp/etcdbackup.dbDemo: 
+
+Verifying the Etcd Backup
+
+sudo ETCDCTL_API=3 etcdctl --write-out=table snapshot status
+/tmp/etcdbackup.db
+Just to be sure: cp /tmp/etcdbackup.db /tmp/etcdbackup.db.2
+======================
+
+INSTALACION DE ETCDCTL:
+-------------------------
+
+etcdctl es el cliente de linea de comandos para
+interactuar con etcd directamente.
+
+  sudo apt install etcd-client
+
+  etcdctl version
+  # etcdctl version: 3.4.30
+  # API version: 3.4
+
+COMO LOCALIZAR LOS CERTIFICADOS DE ETCD:
+------------------------------------------
+
+etcdctl necesita autenticarse con etcd usando TLS.
+Los certificados estan en /etc/kubernetes/pki/etcd/
+
+  ls /etc/kubernetes/pki/etcd/
+  # ca.crt        CA de etcd
+  # server.crt    certificado del servidor etcd
+  # server.key    clave privada del servidor etcd
+
+Tambien puedes verlos en el manifiesto de etcd:
+  cat /etc/kubernetes/manifests/etcd.yaml | grep file
+
+BACKUP DE ETCD:
+----------------
+
+  sudo ETCDCTL_API=3 etcdctl snapshot save \
+    /opt/etcd-backup.db \
+    --endpoints=https://127.0.0.1:2379 \
+    --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+    --cert=/etc/kubernetes/pki/etcd/server.crt \
+    --key=/etc/kubernetes/pki/etcd/server.key
+
+Verificar que el backup se creo correctamente:
+
+  sudo ETCDCTL_API=3 etcdctl snapshot status \
+    /opt/etcd-backup.db \
+    --write-out=table
+
+  Salida esperada:
+  +----------+----------+------------+------------+
+  |   HASH   | REVISION | TOTAL KEYS | TOTAL SIZE |
+  +----------+----------+------------+------------+
+  | xxxxxxxx |    XXXX  |    XXX     |   X.X MB   |
+  +----------+----------+------------+------------+
+
+  ls -lh /opt/etcd-backup.db
+  # verificar que el fichero existe y tiene tamano > 0
+
+RESTORE DE ETCD:
+-----------------
+
+El restore es el proceso mas delicado y el que
+mas errores causa en el examen. Sigue este orden
+exacto sin saltarte pasos.
+
+POR QUE EL ORDEN IMPORTA:
+  etcd no puede restaurarse mientras esta corriendo.
+  Como corre como static pod, debes moverlo
+  temporalmente fuera de /etc/kubernetes/manifests/
+  para que kubelet lo detenga.
+
+TIP antes del restore, sacar los valores en uso así:
+
+sudo grep -E -- '--name=|--initial-cluster=|--initial-advertise-peer-urls=|--listen-client-urls=|--advertise-client-urls=|--listen-peer-urls=' /etc/kubernetes/manifests/etcd.yaml
+
+Paso 1 - Crear los datos restaurados en una nueva ruta:
+
+  sudo ETCDCTL_API=3 etcdctl snapshot restore \
+    /opt/etcd-backup.db \
+    --data-dir=/var/lib/etcd-restored
+
+  Esto crea un nuevo directorio con los datos
+  restaurados. No sobreescribe etcd en caliente.
+
+Paso 2 - Detener etcd moviendo el manifiesto:
+
+  sudo mv /etc/kubernetes/manifests/etcd.yaml \
+    /tmp/etcd.yaml
+
+  kubelet detecta el cambio y detiene el pod de etcd
+  en unos segundos. Verificar:
+
+  watch crictl ps | grep etcd
+  # esperar hasta que etcd desaparezca de la lista
+  # Ctrl+C
+
+Paso 3 - Reemplazar el directorio de datos de etcd:
+
+  sudo mv /var/lib/etcd /var/lib/etcd-old
+  sudo mv /var/lib/etcd-restored /var/lib/etcd
+
+Paso 4 - Restaurar el manifiesto de etcd:
+
+  sudo mv /tmp/etcd.yaml \
+    /etc/kubernetes/manifests/etcd.yaml
+
+  kubelet detecta el manifiesto y arranca etcd
+  con los datos restaurados. Puede tardar 1-2 minutos.
+
+Paso 5 - Verificar que etcd y el cluster se recuperaron:
+
+  watch crictl ps | grep etcd
+  # esperar hasta que etcd aparezca como Running
+  # Ctrl+C
+
+  kubectl get nodes
+  # el cluster debe responder correctamente
+
+  kubectl get pods -A
+  # todos los pods del sistema deben estar Running
+
+TRUCO DE EXAMEN:
+  Si kubectl no responde inmediatamente tras el restore,
+  espera 60 segundos. etcd necesita tiempo para
+  inicializarse completamente antes de que el
+  apiserver pueda conectarse.
+
+--------------------------------------------------
+UPGRADE DEL CLUSTER
+--------------------------------------------------
+
+IMPORTANCIA EN EL EXAMEN:
+---------------------------
+
+El upgrade es otra tarea frecuente en el examen.
+El proceso tiene un orden estricto que no puedes
+alterar:
+
+  1. Siempre upgrade del control plane primero
+  2. Luego upgrade de los workers uno a uno
+  3. Nunca saltar versiones menores (1.35 -> 1.36,
+     no 1.35 -> 1.37)
+
+COMO FUNCIONA EL UPGRADE INTERNAMENTE:
+----------------------------------------
+
+kubeadm upgrade apply hace en el control plane:
+  1. Verifica compatibilidad de la nueva version
+  2. Descarga las nuevas imagenes del control plane
+  3. Actualiza los static pods (apiserver, etcd, etc)
+     con las nuevas imagenes uno a uno
+  4. Actualiza el kubeconfig y los certificados
+  5. Actualiza los addons (kube-proxy, CoreDNS)
+
+El upgrade de kubelet y kubectl es separado porque
+no son gestionados por kubeadm, son paquetes apt.
+
+TU ENTORNO DE PRACTICA:
+  Version actual:  v1.35.5
+  Version destino: v1.36.x (latest patch de 1.36)
+
+PASO 1 - UPGRADE DEL CONTROL PLANE [CP]
+-----------------------------------------
+
+Actualizar el repositorio apt a la version 1.36:
+
+  sudo sed -i \
+    's|stable:/v1.35|stable:/v1.36|g' \
+    /etc/apt/sources.list.d/kubernetes.list
+
+  sudo apt-get update
+
+Verificar versiones disponibles de kubeadm 1.36:
+
+  apt-cache madison kubeadm | grep 1.36 | head -5
+
+Quitar el hold de kubeadm para poder actualizarlo:
+
+  sudo apt-mark unhold kubeadm
+
+Instalar la nueva version de kubeadm:
+
+  sudo apt-get install -y kubeadm=1.36.*
+
+Volver a marcar kubeadm con hold:
+
+  sudo apt-mark hold kubeadm
+
+Verificar la nueva version de kubeadm:
+
+  kubeadm version
+  # esperado: v1.36.x
+
+Verificar el plan de upgrade antes de ejecutarlo:
+
+  sudo kubeadm upgrade plan
+
+  La salida muestra:
+  - Version actual del cluster
+  - Version a la que se puede upgradear
+  - Componentes que seran actualizados
+  - Si hay algun problema que impide el upgrade
+
+Ejecutar el upgrade del control plane:
+
+  sudo kubeadm upgrade apply v1.36.0
+
+  Este proceso tarda 3-5 minutos.
+  Veras como cada componente se actualiza.
+  Al final debe mostrar:
+  "SUCCESS! Your cluster was successfully upgraded
+   to v1.36.0"
+
+Hacer drain del nodo control plane antes de
+actualizar kubelet (evacua los pods del nodo):
+
+  kubectl drain cka-cp1 \
+    --ignore-daemonsets \
+    --delete-emptydir-data
+
+Quitar el hold de kubelet y kubectl:
+
+  sudo apt-mark unhold kubelet kubectl
+
+Actualizar kubelet y kubectl en el control plane:
+
+  sudo apt-get install -y \
+    kubelet=1.36.* \
+    kubectl=1.36.*
+
+Volver a marcar con hold:
+
+  sudo apt-mark hold kubelet kubectl
+
+Reiniciar kubelet:
+
+  sudo systemctl daemon-reload
+  sudo systemctl restart kubelet
+
+Volver a poner el nodo en servicio:
+
+  kubectl uncordon cka-cp1
+
+Verificacion del control plane:
+
+  kubectl get nodes
+  # esperado:
+  # cka-cp1       Ready   control-plane   v1.36.x
+  # cka-worker1   Ready   <none>          v1.35.5
+  # cka-worker2   Ready   <none>          v1.35.5
+
+PASO 2 - UPGRADE DE WORKERS [W]
+---------------------------------
+
+Repetir para cada worker. Siempre de uno en uno.
+Nunca upgradear dos workers simultaneamente en
+produccion, el examen tampoco lo pide.
+
+EJECUTAR EN cka-worker1:
+
+Actualizar el repositorio apt a 1.36:
+
+  sudo sed -i \
+    's|stable:/v1.35|stable:/v1.36|g' \
+    /etc/apt/sources.list.d/kubernetes.list
+
+  sudo apt-get update
+
+Quitar hold e instalar nueva version de kubeadm:
+
+  sudo apt-mark unhold kubeadm
+  sudo apt-get install -y kubeadm=1.36.*
+  sudo apt-mark hold kubeadm
+
+Actualizar la configuracion del nodo worker:
+
+  sudo kubeadm upgrade node
+
+  Este comando es diferente a kubeadm upgrade apply.
+  En workers solo actualiza la configuracion local
+  del kubelet, no los componentes del control plane.
+
+Desde cka-cp1, hacer drain del worker:
+
+  kubectl drain cka-worker1 \
+    --ignore-daemonsets \
+    --delete-emptydir-data
+
+  Esto evacua todos los pods del worker antes
+  de actualizarlo. Los pods se replanifican
+  en otros nodos disponibles.
+
+DE VUELTA EN cka-worker1:
+
+Actualizar kubelet y kubectl:
+
+  sudo apt-mark unhold kubelet kubectl
+  sudo apt-get install -y kubelet=1.36.* kubectl=1.36.*
+  sudo apt-mark hold kubelet kubectl
+
+  sudo systemctl daemon-reload
+  sudo systemctl restart kubelet
+
+Desde cka-cp1, volver a poner el worker en servicio:
+
+  kubectl uncordon cka-worker1
+
+Verificacion tras upgradear worker1:
+
+  kubectl get nodes
+  # esperado:
+  # cka-cp1       Ready   control-plane   v1.36.x
+  # cka-worker1   Ready   <none>          v1.36.x
+  # cka-worker2   Ready   <none>          v1.35.5
+
+Repetir el mismo proceso para cka-worker2.
+
+Verificacion final del cluster completo:
+
+  kubectl get nodes
+  # esperado:
+  # cka-cp1       Ready   control-plane   v1.36.x
+  # cka-worker1   Ready   <none>          v1.36.x
+  # cka-worker2   Ready   <none>          v1.36.x
+
+  kubectl get pods -A
+  # todos los pods del sistema deben estar Running
+
+--------------------------------------------------
+TROUBLESHOOTING - CASOS REALES
+--------------------------------------------------
+
+CASO 1: kubeadm upgrade apply falla con error de etcd
+------------------------------------------------------
+
+Sintoma:
+  error execution phase upgrade/etcd: couldn't
+  upgrade control plane: timed out waiting for
+  the condition
+
+Causa mas comun:
+  etcd no esta healthy antes del upgrade.
+
+Diagnostico:
+
+  sudo ETCDCTL_API=3 etcdctl endpoint health \
+    --endpoints=https://127.0.0.1:2379 \
+    --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+    --cert=/etc/kubernetes/pki/etcd/server.crt \
+    --key=/etc/kubernetes/pki/etcd/server.key
+
+  crictl ps | grep etcd
+  crictl logs <id-del-contenedor-etcd>
+
+Solucion:
+  Resolver el problema de etcd antes de reintentar
+  el upgrade. Ver caso 3 de este modulo.
+
+CASO 2: kubectl drain falla con pods que no se pueden evict
+-----------------------------------------------------------
+
+Sintoma:
+  error: unable to drain node "cka-worker1",
+  aborting command...
+  There are pending nodes to be drained:
+  cka-worker1
+  error: cannot delete Pods with local storage
+
+Causa:
+  Hay pods con emptyDir volumes o pods sin
+  un controller (pods standalone).
+
+Solucion:
+  Agregar los flags necesarios:
+
+  kubectl drain cka-worker1 \
+    --ignore-daemonsets \
+    --delete-emptydir-data \
+    --force
+
+  --ignore-daemonsets: ignora pods de DaemonSets
+                       que no pueden moverse
+  --delete-emptydir-data: acepta perder datos
+                          de volumes emptyDir
+  --force: elimina pods sin controller
+
+CASO 3: etcd no arranca tras restore
+--------------------------------------
+
+Sintoma:
+  kubectl get nodes no responde.
+  crictl ps | grep etcd no muestra etcd Running.
+
+Diagnostico:
+
+  crictl ps -a | grep etcd
+  # ver el estado del contenedor aunque no este Running
+
+  crictl logs <id-etcd>
+  # buscar el error exacto
+
+  sudo journalctl -u kubelet | tail -50
+  # ver si kubelet reporta algun error al arrancar etcd
+
+Causas comunes y soluciones:
+
+  1. Permisos incorrectos en el directorio de datos:
+     sudo chown -R root:root /var/lib/etcd
+     sudo chmod 700 /var/lib/etcd
+
+  2. El manifiesto de etcd apunta al directorio
+     de datos anterior. Verificar:
+     cat /etc/kubernetes/manifests/etcd.yaml \
+       | grep data-dir
+     # debe coincidir con donde restauraste los datos
+
+  3. El snapshot esta corrupto:
+     sudo ETCDCTL_API=3 etcdctl snapshot status \
+       /opt/etcd-backup.db
+     # si falla, el snapshot no es valido
+
+CASO 4: nodo worker en estado NotReady tras upgrade
+-----------------------------------------------------
+
+Sintoma:
+  kubectl get nodes muestra el worker NotReady
+  despues de actualizar kubelet.
+
+Diagnostico:
+
+  kubectl describe node cka-worker1
+  # buscar en la seccion Conditions el motivo
+
+  En el worker:
+  sudo systemctl status kubelet
+  sudo journalctl -u kubelet | tail -30
+
+Causas comunes:
+
+  1. kubelet no se reinicio tras el upgrade:
+     sudo systemctl daemon-reload
+     sudo systemctl restart kubelet
+
+  2. Version de kubelet no coincide con el cluster:
+     kubelet --version
+     # debe ser v1.36.x
+
+  3. containerd no esta corriendo:
+     sudo systemctl status containerd
+     sudo systemctl restart containerd
+
+CASO 5: static pod no aparece en kubectl get pods
+--------------------------------------------------
+
+Sintoma:
+  Modificaste un manifiesto en
+  /etc/kubernetes/manifests/ pero el pod no
+  aparece o no se actualiza.
+
+Diagnostico:
+
+  ls -la /etc/kubernetes/manifests/
+  # verificar que el fichero existe y tiene permisos
+
+  sudo systemctl status kubelet
+  # kubelet debe estar activo para leer los manifiestos
+
+  crictl ps -a | grep <nombre-componente>
+  # ver el estado real del contenedor
+
+Solucion:
+  kubelet detecta cambios en manifests automaticamente.
+  Si no lo hace, forzar recarga:
+
+  sudo systemctl restart kubelet
+
+  Si el manifiesto tiene errores de sintaxis YAML,
+  kubelet no podra crear el pod. Verificar:
+
+  cat /etc/kubernetes/manifests/kube-apiserver.yaml \
+    | python3 -c "import sys,yaml; yaml.safe_load(sys.stdin)"
+  # sin output = YAML valido
+  # con error = YAML invalido, revisar indentacion
+
+--------------------------------------------------
+CHECKPOINT - VERIFICACION DE COMPRENSION
+--------------------------------------------------
+
+Pregunta 1:
+  Cual es el orden correcto para hacer un upgrade
+  de v1.35 a v1.36 en un cluster con 1 CP y 2 workers?
+
+Respuesta esperada:
+  1. Upgrade kubeadm en el CP
+  2. kubeadm upgrade apply v1.36.0 en el CP
+  3. drain del CP
+  4. Upgrade kubelet y kubectl en el CP
+  5. uncordon del CP
+  6. Para cada worker:
+     upgrade kubeadm, kubeadm upgrade node,
+     drain desde CP, upgrade kubelet,
+     restart kubelet, uncordon desde CP
+
+Pregunta 2:
+  Por que no puedes hacer el restore de etcd
+  mientras etcd esta corriendo?
+
+Respuesta esperada:
+  etcd bloquearia el directorio de datos y los
+  nuevos datos restaurados entrarian en conflicto
+  con el estado en memoria de etcd. El resultado
+  seria corrupcion de datos o un restore que no
+  tiene efecto. Debes detener etcd moviendo su
+  manifiesto fuera de /etc/kubernetes/manifests/
+
+Pregunta 3:
+  Donde guarda kubeadm los certificados TLS
+  del cluster y como verificas su expiracion?
+
+Respuesta esperada:
+  En /etc/kubernetes/pki/
+  sudo kubeadm certs check-expiration
+
+Pregunta 4:
+  Que diferencia hay entre kubeadm upgrade apply
+  y kubeadm upgrade node?
+
+Respuesta esperada:
+  kubeadm upgrade apply se ejecuta en el CP y
+  actualiza todos los componentes del control plane
+  (apiserver, etcd, scheduler, controller-manager)
+  ademas de los addons (kube-proxy, CoreDNS).
+  kubeadm upgrade node se ejecuta en los workers
+  y solo actualiza la configuracion local de kubelet,
+  no toca componentes del control plane.
+
+Pregunta 5:
+  Un pod standalone (sin Deployment ni ReplicaSet)
+  esta corriendo en el nodo que quieres upgradear.
+  kubectl drain falla. Como lo resuelves?
+
+Respuesta esperada:
+  kubectl drain <nodo> \
+    --ignore-daemonsets \
+    --delete-emptydir-data \
+    --force
+  El flag --force elimina pods sin controller.
+  Hay que aceptar que ese pod no se replanificara
+  automaticamente en otro nodo.
+
+--------------------------------------------------
+LABORATORIO CRONOMETRADO
+--------------------------------------------------
+
+OBJETIVO: completar en menos de 20 minutos.
+
+TAREA 1 - BACKUP DE ETCD (5 minutos):
+
+  Realiza un backup de etcd y guardalo en
+  /opt/backup/etcd-backup.db
+  Verifica que el backup es valido.
+
+TAREA 2 - UPGRADE DEL CLUSTER (15 minutos):
+
+  El cluster esta en v1.35.5.
+  Upgradea el control plane cka-cp1 a v1.36.x.
+  Upgradea el worker cka-worker1 a v1.36.x.
+  El worker cka-worker2 puede quedar en v1.35.x.
+
+CRITERIOS DE EXITO:
+
+  Tarea 1:
+  ls -lh /opt/backup/etcd-backup.db
+  # fichero existe con tamano mayor a 0
+
+  sudo ETCDCTL_API=3 etcdctl snapshot status \
+    /opt/backup/etcd-backup.db \
+    --write-out=table
+  # debe mostrar la tabla con HASH, REVISION, etc
+
+  Tarea 2:
+  kubectl get nodes
+  # esperado:
+  # cka-cp1       Ready   control-plane   v1.36.x
+  # cka-worker1   Ready   <none>          v1.36.x
+  # cka-worker2   Ready   <none>          v1.35.5
+
+  kubectl get pods -A
+  # todos los pods Running
+
+SOLUCION DE REFERENCIA (no mirar hasta terminar):
+
+  Tarea 1:
+  sudo mkdir -p /opt/backup
+
+  sudo ETCDCTL_API=3 etcdctl snapshot save \
+    /opt/backup/etcd-backup.db \
+    --endpoints=https://127.0.0.1:2379 \
+    --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+    --cert=/etc/kubernetes/pki/etcd/server.crt \
+    --key=/etc/kubernetes/pki/etcd/server.key
+
+  sudo ETCDCTL_API=3 etcdctl snapshot status \
+    /opt/backup/etcd-backup.db \
+    --write-out=table
+
+  Tarea 2:
+  sudo sed -i \
+    's|stable:/v1.35|stable:/v1.36|g' \
+    /etc/apt/sources.list.d/kubernetes.list
+  sudo apt-get update
+  sudo apt-mark unhold kubeadm
+  sudo apt-get install -y kubeadm=1.36.*
+  sudo apt-mark hold kubeadm
+  sudo kubeadm upgrade apply v1.36.0
+  kubectl drain cka-cp1 \
+    --ignore-daemonsets --delete-emptydir-data
+  sudo apt-mark unhold kubelet kubectl
+  sudo apt-get install -y kubelet=1.36.* kubectl=1.36.*
+  sudo apt-mark hold kubelet kubectl
+  sudo systemctl daemon-reload
+  sudo systemctl restart kubelet
+  kubectl uncordon cka-cp1
+
+  En cka-worker1:
+  sudo sed -i \
+    's|stable:/v1.35|stable:/v1.36|g' \
+    /etc/apt/sources.list.d/kubernetes.list
+  sudo apt-get update
+  sudo apt-mark unhold kubeadm
+  sudo apt-get install -y kubeadm=1.36.*
+  sudo apt-mark hold kubeadm
+  sudo kubeadm upgrade node
+  
+  Desde cka-cp1:
+  kubectl drain cka-worker1 \
+    --ignore-daemonsets --delete-emptydir-data
+
+  En cka-worker1:
+  sudo apt-mark unhold kubelet kubectl
+  sudo apt-get install -y kubelet=1.36.* kubectl=1.36.*
+  sudo apt-mark hold kubelet kubectl
+  sudo systemctl daemon-reload
+  sudo systemctl restart kubelet
+
+  Desde cka-cp1:
+  kubectl uncordon cka-worker1
+  kubectl get nodes
+
+==================================================
+FIN M02 - INSTALACION Y CONFIGURACION CON KUBEADM
+SIGUIENTE: M03 - RBAC Y SEGURIDAD DEL CLUSTER
+==================================================
+
+
+
+

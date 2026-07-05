@@ -1,0 +1,888 @@
+==================================================
+M00 - ENTORNO DE LABORATORIO, KUBECTL AVANZADO
+      Y ESTRATEGIA DE EXAMEN CKA
+==================================================
+
+MODULO: M00
+TIPO: Fundacional - sin prerrequisitos
+ENTORNO: K3s single-node
+PESO EN EXAMEN: No cubre dominio especifico.
+                Habilita velocidad de ejecucion en todos.
+TIEMPO ESTIMADO: 3-4 horas de practica
+
+--------------------------------------------------
+OBJETIVO DEL MODULO
+--------------------------------------------------
+
+El examen CKA es 100% practico en terminal. Tienes 2 horas
+para resolver 15-20 tareas distribuidas en 6 clusters
+distintos. No hay opcion multiple. No hay parcial.
+
+La diferencia entre aprobar y no aprobar en muchos casos
+no es conocimiento tecnico, es velocidad de ejecucion.
+
+Un candidato que tarda 4 minutos en escribir un Deployment
+desde cero pierde tiempo valioso. Uno que lo genera en
+15 segundos con kubectl y --dry-run=client -o yaml tiene
+margen para pensar, verificar y resolver problemas reales.
+
+Este modulo construye esa base operacional antes de tocar
+cualquier concepto de Kubernetes.
+
+--------------------------------------------------
+OBJETIVOS DE APRENDIZAJE MEDIBLES
+--------------------------------------------------
+
+Al terminar este modulo seras capaz de:
+
+1. Configurar vim y bash para operar al ritmo del examen
+2. Generar cualquier recurso YAML en menos de 20 segundos
+   usando kubectl en modo imperativo
+3. Navegar entre contextos y namespaces sin errores
+4. Localizar documentacion oficial en kubernetes.io
+   en menos de 60 segundos durante el examen4.4
+5. Aplicar la estrategia de gestion del tiempo del examen
+
+--------------------------------------------------
+1. CONFIGURACION DEL ENTORNO
+--------------------------------------------------
+
+1.1 VIM
+-------
+
+El examen permite vim y nano. Vim con la configuracion
+correcta te ahorra minutos evitando errores de indentacion
+en YAML que son dificiles de detectar a simple vista.
+
+Ejecutar una vez en cada nodo del laboratorio:
+
+cat >> ~/.vimrc <<'EOF'
+" --- OBLIGATORIO ---
+set expandtab       " convierte Tab en espacios
+                    " YAML no acepta tabs, falla silenciosamente
+set tabstop=2       " un Tab equivale a 2 espacios
+set shiftwidth=2    " indentacion con >> o << usa 2 espacios
+
+
+" --- OPCIONAL PERO RECOMENDADO ---
+set number          " muestra numeros de linea
+                    " util para identificar la linea exacta
+                    " cuando kubectl reporta un error de YAML
+
+
+EOF
+
+Verificacion de expandtab:
+  vim /tmp/test.yaml
+  Pulsa Tab en cualquier linea.
+  Debe insertar 2 espacios, no el caracter ^I (tab real).
+
+Verificacion de pastetoggle:
+  Abre un fichero con vim.
+  Pulsa F2 (vera "-- INSERT (paste) --" en la barra inferior).
+  Pega un bloque YAML copiado.
+  La indentacion debe mantenerse tal como fue copiada.
+  Pulsa F2 de nuevo para volver al modo normal.
+
+Caso real sin pastetoggle configurado:
+  Copias esto desde kubernetes.io:
+    spec:
+      containers:
+      - name: nginx
+        image: nginx
+
+  Vim lo convierte en:
+    spec:
+      containers:
+          - name: nginx
+                image: nginx
+
+  kubectl apply falla con error de indentacion.
+  Con F2 activado antes de pegar, el YAML queda intacto.
+
+1.2 BASH: ALIASES Y VARIABLES DE ENTORNO
+-----------------------------------------
+
+Los aliases se dividen en dos grupos segun su impacto
+en velocidad durante el examen.
+
+cat >> ~/.bashrc <<'EOF'
+
+# =============================================
+# ALIASES OBLIGATORIOS - alto impacto en examen
+# =============================================
+
+alias k='kubectl'
+# Ahorra ~8 caracteres por comando.
+# Con 200+ comandos en 2 horas, el ahorro es significativo.
+
+export do='--dry-run=client -o yaml'
+# Genera YAML valido sin crear el recurso en el cluster.
+# Base de todo trabajo imperativo. Se usa en cada pregunta.
+# Uso: kubectl create deployment web --image=nginx $do
+
+export now='--force --grace-period=0'
+# Elimina pods de forma inmediata sin esperar el periodo
+# de gracia (por defecto 30 segundos).
+# Uso: kubectl delete pod mi-pod $now
+
+# =============================================
+# ALIASES OPCIONALES - impacto moderado
+# =============================================
+
+alias kgp='kubectl get pods'
+# Util para listar pods rapidamente sin flags adicionales.
+# LIMITACION: no acepta flags directamente de forma natural.
+# Cuando necesites flags, usa k directamente:
+#   k get pods -n kube-system      <- correcto
+#   k get pods -o wide             <- correcto
+#   k get pods --show-labels       <- correcto
+# kgp es util solo para el caso mas simple: ver pods
+# en el namespace actual sin opciones adicionales.
+
+alias kgs='kubectl get svc'
+# Mismo razonamiento que kgp pero para services.
+# Para casos con flags usa k get svc directamente.
+
+# =============================================
+# AUTOCOMPLETADO - obligatorio configurar
+# =============================================
+
+source <(kubectl completion bash)
+# Habilita autocompletado de kubectl para nombres de
+# recursos, flags, namespaces y nombres de objetos.
+# Sin esto, debes escribir cada nombre completo a mano.
+
+complete -F __start_kubectl k
+# Extiende el autocompletado al alias k.
+# Sin esta linea, Tab funciona con kubectl pero no con k.
+
+EOF
+
+source ~/.bashrc
+
+Verificacion de aliases:
+
+k version --short
+# debe mostrar version de cliente y servidor
+
+k get nodes
+# debe mostrar el nodo con estado Ready
+
+kubectl create deployment demo --image=nginx $do
+# debe imprimir el YAML del Deployment sin crearlo
+
+kubectl delete pod inexistente $now 2>/dev/null; echo ok
+# debe ejecutar sin esperar 30 segundos
+
+Verificacion de autocompletado:
+  Escribe "k get po" y pulsa Tab dos veces.
+  Debe mostrar: pods  podtemplates  poddisruptionbudgets
+
+NOTA SOBRE EL EXAMEN REAL:
+  El autocompletado esta habilitado por defecto en el
+  entorno del examen. En K3s puede requerir instalacion
+  previa de bash-completion:
+
+  apt-get install bash-completion -y
+  source /usr/share/bash-completion/bash_completion
+  source ~/.bashrc
+
+--------------------------------------------------
+2. KUBECTL IMPERATIVO - LA HERRAMIENTA CENTRAL
+--------------------------------------------------
+
+El modo imperativo de kubectl genera manifiestos YAML
+validos que puedes redirigir a fichero, modificar y aplicar.
+Esta tecnica es la base de velocidad en el examen.
+
+Nunca escribas un YAML desde cero si kubectl puede
+generarlo por ti.
+
+2.1 PATRON FUNDAMENTAL
+-----------------------
+
+El patron es siempre el mismo:
+
+  kubectl create <recurso> <nombre> <opciones> $do > fichero.yaml
+  vim fichero.yaml        # editar solo si es necesario
+  kubectl apply -f fichero.yaml
+  kubectl get <recurso>   # verificar resultado
+
+2.2 RECURSOS QUE APARECEN EN EL EXAMEN
+----------------------------------------
+
+Deployment:
+
+kubectl create deployment mi-app \
+  --image=nginx:1.25 \
+  --replicas=3 \
+  $do > deployment.yaml
+
+cat deployment.yaml
+kubectl apply -f deployment.yaml
+kubectl get deployment mi-app
+kubectl rollout status deployment/mi-app
+
+Pod simple:
+
+kubectl run mi-pod \
+  --image=busybox \
+  --restart=Never \
+  $do > pod.yaml
+
+kubectl apply -f pod.yaml
+kubectl get pod mi-pod
+
+Pod con comando especifico:
+
+kubectl run debug-pod \
+  --image=busybox \
+  --restart=Never \
+  --command \
+  $do -- sh -c "sleep 3600" > pod-debug.yaml
+
+kubectl apply -f pod-debug.yaml
+
+Service ClusterIP (exponer un deployment existente):
+
+kubectl expose deployment mi-app \
+  --port=80 \
+  --target-port=80 \
+  --name=mi-app-svc \
+  $do > service.yaml
+
+kubectl apply -f service.yaml
+kubectl get svc mi-app-svc
+
+ConfigMap desde literal:
+
+kubectl create configmap mi-config \
+  --from-literal=env=produccion \
+  --from-literal=debug=false \
+  $do > configmap.yaml
+
+kubectl apply -f configmap.yaml
+
+Secret generico:
+
+kubectl create secret generic mi-secret \
+  --from-literal=password=supersecreta \
+  $do > secret.yaml
+
+kubectl apply -f secret.yaml
+
+ServiceAccount:
+
+kubectl create serviceaccount mi-sa $do > sa.yaml
+kubectl apply -f sa.yaml
+
+NOTA SOBRE LOS MANIFIESTOS GENERADOS:
+kubectl con $do incluye campos como creationTimestamp: null
+y status: {} que son inocuos. No los elimines si no es
+necesario, ahorras tiempo. kubectl apply los ignora.
+
+2.3 EXTRAER YAML DE RECURSOS EXISTENTES
+-----------------------------------------
+
+Util cuando necesitas modificar un recurso ya desplegado:
+
+kubectl get deployment mi-app -o yaml > mi-app-backup.yaml
+kubectl get pod mi-pod -o yaml
+kubectl get svc mi-app-svc -o yaml
+
+Caso real de examen: te piden cambiar la imagen de un
+Deployment existente. Dos opciones:
+
+Opcion A - edicion directa (mas rapida):
+kubectl set image deployment/mi-app nginx=nginx:1.26
+
+Opcion B - extraer, editar, aplicar (mas segura):
+kubectl get deployment mi-app -o yaml > mi-app.yaml
+vim mi-app.yaml   # cambiar la linea image:
+kubectl apply -f mi-app.yaml
+
+Siempre verifica despues:
+kubectl rollout status deployment/mi-app
+kubectl get pods -l app=mi-app
+
+--------------------------------------------------
+3. NAMESPACES Y CONTEXTOS
+--------------------------------------------------
+
+3.1 POR QUE ES CRITICO EN EL EXAMEN
+--------------------------------------
+
+El examen usa 6 clusters distintos. Cada pregunta indica
+en que cluster y namespace debes trabajar. Ejecutar un
+comando en el cluster o namespace equivocado es un error
+que no siempre es obvio de detectar.
+
+Error mas comun en el examen: olvidar cambiar de contexto
+entre preguntas y crear recursos en el cluster anterior.
+
+3.2 GESTION DE CONTEXTOS
+--------------------------
+
+Ver todos los contextos disponibles:
+
+kubectl config get-contexts
+
+La salida muestra:
+  CURRENT  NAME    CLUSTER  AUTHINFO  NAMESPACE
+  *        k3s     k3s      default   default
+
+El asterisco (*) indica el contexto activo.
+
+Cambiar de contexto:
+
+kubectl config use-context <nombre-del-contexto>
+
+Ver contexto actual:
+
+kubectl config current-context
+
+Ver configuracion completa del kubeconfig:
+
+kubectl config view
+
+Ver a que cluster apunta el contexto actual:
+
+kubectl config view --minify
+
+IMPORTANTE: En el examen, cada pregunta comienza con
+el comando exacto para cambiar al contexto correcto.
+Ejecutalo siempre antes de hacer cualquier otra cosa.
+
+3.3 NAMESPACES
+---------------
+
+Crear namespace:
+kubectl create namespace desarrollo
+
+Listar namespaces:
+kubectl get namespaces
+
+Trabajar en un namespace especifico (flag -n):
+kubectl get pods -n kube-system
+kubectl get all -n desarrollo
+
+Cambiar namespace por defecto en el contexto activo:
+
+kubectl config set-context --current --namespace=desarrollo
+
+Verificacion:
+kubectl config view --minify | grep namespace
+
+Volver al namespace default:
+kubectl config set-context --current --namespace=default
+
+TRUCO DE EXAMEN:
+Si una pregunta dice "trabaja en el namespace kube-system",
+ejecuta esto al inicio:
+
+kubectl config set-context --current --namespace=kube-system
+
+Todos los comandos siguientes no necesitan -n kube-system.
+Ahorra tiempo en preguntas largas. Al terminar la pregunta,
+vuelve a default para no contaminar la siguiente tarea.
+
+--------------------------------------------------
+4. INSPECCION Y DEBUGGING RAPIDO
+--------------------------------------------------
+
+Estos comandos aparecen en practicamente cada pregunta
+del examen, directa o indirectamente.
+
+4.1 DESCRIBE - LA PRIMERA HERRAMIENTA DE DIAGNOSTICO
+------------------------------------------------------
+
+kubectl describe muestra estado actual, eventos recientes
+y condiciones de fallo. Es el primer comando ante cualquier
+comportamiento inesperado.
+
+kubectl describe pod <nombre>
+kubectl describe node <nombre>
+kubectl describe deployment <nombre>
+kubectl describe svc <nombre>
+
+Lo mas importante en la salida de describe pod:
+  Seccion "Events" al final:
+    muestra por que un pod falla, no arranca,
+    o tiene problemas de scheduling.
+  Seccion "Conditions":
+    Ready, PodScheduled, ContainersReady, Initialized.
+  Seccion "Containers":
+    imagen actual, puertos, variables de entorno,
+    volumenes montados.
+
+4.2 LOGS - DIAGNOSTICO DE APLICACION
+--------------------------------------
+
+kubectl logs <nombre-pod>
+
+Logs del contenedor anterior (si el pod ha reiniciado):
+kubectl logs <nombre-pod> --previous
+
+Seguir logs en tiempo real:
+kubectl logs -f <nombre-pod>
+
+Pod con multiples contenedores, especificar cual:
+kubectl logs <nombre-pod> -c <nombre-contenedor>
+
+4.3 EXEC - ENTRAR EN UN CONTENEDOR
+------------------------------------
+
+kubectl exec -it <nombre-pod> -- /bin/sh
+kubectl exec -it <nombre-pod> -- /bin/bash
+
+Ejecutar un comando sin sesion interactiva:
+kubectl exec <nombre-pod> -- env
+kubectl exec <nombre-pod> -- cat /etc/resolv.conf
+kubectl exec <nombre-pod> -- nslookup kubernetes.default
+
+4.4 EXTRAER CAMPOS ESPECIFICOS
+--------------------------------
+
+Tres herramientas disponibles segun el caso.
+Ninguna es obligatoria memorizarla, todas son
+alternativas para el mismo problema.
+
+HERRAMIENTA 1: custom-columns
+-------------------------------
+
+Util cuando necesitas mostrar campos especificos
+en formato tabla. Mas robusto que awk porque
+referencia campos por nombre, no por posicion.
+
+kubectl get pods -n kube-system \
+  -o custom-columns=\
+NAME:.metadata.name,\
+NODE:.spec.nodeName,\
+IMAGE:.spec.containers[0].image
+
+HERRAMIENTA 2: grep/awk con --no-headers
+------------------------------------------
+
+Util para filtrar y contar resultados.
+
+  Contar nodos Ready:
+  kubectl get nodes --no-headers | grep -c Ready
+
+  Filtrar pods que no estan Running:
+  kubectl get pods --no-headers | grep -v Running
+
+HERRAMIENTA 3: jsonpath
+-------------------------
+
+Util para extraer un valor unico y guardarlo en fichero.
+
+  kubectl get pod mi-pod \
+    -o jsonpath='{.status.podIP}' > /tmp/ip.txt
+
+COMO DESCUBRIR LOS CAMPOS DISPONIBLES:
+----------------------------------------
+
+Sin memorizar nada. Dos comandos en terminal:
+
+  Opcion A - ver el YAML del recurso:
+  kubectl get pod <nombre> -o yaml
+
+  La ruta en custom-columns o jsonpath es el camino
+  de indentacion separado por puntos:
+
+    spec:
+      nodeName: worker-01   ->  .spec.nodeName
+
+    spec:
+      containers:
+      - image: nginx        ->  .spec.containers[0].image
+
+  Opcion B - kubectl explain para navegar la estructura:
+  kubectl explain pod.spec
+  kubectl explain pod.spec.containers
+
+REGLA PARA EL EXAMEN:
+----------------------
+
+  custom-columns  -> mostrar varios campos en tabla
+  grep/awk        -> filtrar y contar
+  jsonpath        -> extraer un valor unico a fichero
+
+--------------------------------------------------
+5. DOCUMENTACION OFICIAL DURANTE EL EXAMEN
+--------------------------------------------------
+
+El examen CKA permite acceder unicamente a:
+  https://kubernetes.io/docs
+
+Nada mas. No Stack Overflow, no GitHub, no Google.
+
+5.1 PAGINAS QUE DEBES CONOCER
+-------------------------------
+
+Practica navegar a estas paginas en menos de 30 segundos
+usando la barra de busqueda de kubernetes.io.
+
+Referencia de API (campos de manifiestos YAML):
+  /docs/reference/kubernetes-api/
+
+Taints y tolerations:
+  /docs/concepts/scheduling-eviction/taint-and-toleration/
+
+NetworkPolicy:
+  /docs/concepts/services-networking/network-policies/
+
+PersistentVolume:
+  /docs/concepts/storage/persistent-volumes/
+
+RBAC:
+  /docs/reference/access-authn-authz/rbac/
+
+etcd backup:
+  /docs/tasks/administer-cluster/configure-upgrade-etcd/
+
+Upgrade de cluster con kubeadm:
+  /docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/
+
+5.2 COMO USAR LA DOCUMENTACION EFICIENTEMENTE
+-----------------------------------------------
+
+1. Usa Ctrl+F dentro de la pagina para buscar campos
+   especificos del YAML que necesitas.
+
+2. Copia SOLO el bloque que necesitas, no el manifiesto
+   entero. Menos pegado, menos riesgo de errores.
+
+3. Activa F2 en vim antes de pegar desde el navegador
+   para evitar indentacion duplicada (ver seccion 1.1).
+
+--------------------------------------------------
+6. ESTRATEGIA DE TIEMPO EN EL EXAMEN
+--------------------------------------------------
+
+Datos del examen:
+  Duracion:  2 horas (120 minutos)
+  Preguntas: 15-20 tareas
+  Aprobado:  66% o mas
+  Clusters:  6 entornos distintos
+
+6.1 GESTION DE TIEMPO
+----------------------
+
+Tiempo promedio por pregunta: 6-8 minutos.
+Cada pregunta muestra su peso en porcentaje.
+Una pregunta de 13% vale mas que tres de 4%.
+
+Regla de oro:
+  Si llevas mas de 10 minutos en una pregunta,
+  marcala y continua. Vuelve al final.
+
+No te bloquees en una pregunta de 4% cuando hay
+tres de 8% sin resolver.
+
+6.2 ORDEN DE ATAQUE RECOMENDADO
+---------------------------------
+
+Primera pasada (60-70 min):
+  Resuelve todas las preguntas que dominas con
+  seguridad. Salta las que generan duda.
+
+Segunda pasada (30-40 min):
+  Vuelve a las preguntas saltadas. Ya tienes
+  el contexto del examen y menos presion.
+
+Ultimos 10 min:
+  Verifica tus respuestas mas importantes con
+  un kubectl get o describe rapido.
+
+6.3 VERIFICACION DE RESPUESTAS
+--------------------------------
+
+Nunca des una pregunta por terminada sin verificar.
+
+Tras crear un Pod:
+kubectl get pod <nombre>
+# esperado: Running o Completed, nunca CrashLoopBackOff
+
+Tras crear un Deployment:
+kubectl rollout status deployment/<nombre>
+# esperado: "successfully rolled out"
+
+Tras crear un Service:
+kubectl get svc <nombre>
+# verificar puerto y tipo correcto
+
+Tras crear RBAC:
+kubectl auth can-i <verbo> <recurso> \
+  --as=<usuario> -n <namespace>
+# esperado: yes
+
+Tras backup de etcd:
+ls -lh <ruta-del-snapshot>
+# verificar que el fichero existe y tiene tamano mayor a 0
+
+--------------------------------------------------
+7. LABORATORIO GUIADO - FLUJO COMPLETO
+--------------------------------------------------
+
+Este laboratorio simula el flujo de una tarea real
+de examen de principio a fin.
+
+TAREA SIMULADA:
+"En el namespace 'produccion', crea un Deployment
+llamado 'web-server' con imagen nginx:1.25 y 2 replicas.
+Expone el Deployment con un Service ClusterIP en el
+puerto 80. Guarda el numero de pods Running en /tmp/pods.txt"
+
+Paso 1 - Cambiar al contexto y namespace correctos:
+
+kubectl config use-context k3s
+kubectl create namespace produccion
+kubectl config set-context --current --namespace=produccion
+
+Paso 2 - Crear el Deployment con modo imperativo:
+
+kubectl create deployment web-server \
+  --image=nginx:1.25 \
+  --replicas=2 \
+  $do > web-server.yaml
+
+cat web-server.yaml
+kubectl apply -f web-server.yaml
+
+Paso 3 - Verificar el Deployment:
+
+kubectl rollout status deployment/web-server
+kubectl get pods -l app=web-server
+
+Paso 4 - Crear el Service:
+
+kubectl expose deployment web-server \
+  --port=80 \
+  --target-port=80 \
+  $do > web-server-svc.yaml
+
+kubectl apply -f web-server-svc.yaml
+kubectl get svc web-server
+
+Paso 5 - Guardar numero de pods Running:
+
+kubectl get pods \
+  --no-headers \
+  | grep -c Running > /tmp/pods.txt
+
+cat /tmp/pods.txt
+# esperado: 2
+
+Paso 6 - Verificacion final:
+
+kubectl get all -n produccion
+
+Paso 7 - Restaurar namespace default:
+
+kubectl config set-context --current --namespace=default
+
+--------------------------------------------------
+8. TROUBLESHOOTING - CASOS REALES
+--------------------------------------------------
+
+CASO 1: autocompletado no funciona tras source ~/.bashrc
+---------------------------------------------------------
+
+Sintoma:
+  Pulsas Tab despues de "k get po" y no ocurre nada.
+
+Diagnostico:
+
+  type _init_completion 2>/dev/null && echo OK || echo FALTA
+  type __start_kubectl 2>/dev/null && echo OK || echo FALTA
+
+Solucion si falta bash-completion:
+
+  apt-get install bash-completion -y
+  source /usr/share/bash-completion/bash_completion
+  source ~/.bashrc
+
+Solucion si falta kubectl completion:
+
+  echo 'source <(kubectl completion bash)' >> ~/.bashrc
+  echo 'complete -F __start_kubectl k' >> ~/.bashrc
+  source ~/.bashrc
+
+CASO 2: vim inserta tabs en lugar de espacios
+----------------------------------------------
+
+Sintoma:
+  kubectl apply -f fichero.yaml devuelve:
+  "error converting YAML to JSON: yaml: line X:
+  found character that cannot start any token"
+
+Diagnostico:
+  cat -A fichero.yaml | head -20
+  Los tabs aparecen como ^I en la salida.
+
+Solucion inmediata dentro de vim:
+  :set expandtab tabstop=2 shiftwidth=2
+  :retab
+
+  retab convierte todos los tabs existentes a espacios
+  usando la configuracion de tabstop activa.
+
+Solucion permanente:
+  Verificar que ~/.vimrc tiene las lineas de la seccion 1.1.
+
+CASO 3: YAML con indentacion duplicada al pegar
+------------------------------------------------
+
+Sintoma:
+  Pegas un bloque YAML copiado desde kubernetes.io
+  y la indentacion queda desfasada o duplicada.
+
+Causa:
+  El autoindent de vim suma su propia indentacion
+  a la que ya trae el texto pegado.
+
+Solucion:
+  Antes de pegar, pulsa F2 para activar paste mode.
+  Pega el contenido.
+  Pulsa F2 de nuevo para desactivar paste mode.
+  Verifica la indentacion con cat -A fichero.yaml.
+
+CASO 4: comando ejecutado en namespace o contexto incorrecto
+-------------------------------------------------------------
+
+Sintoma:
+  kubectl get pods no muestra el pod recien creado.
+  O aparecen pods que no reconoces.
+
+Diagnostico:
+  kubectl config current-context
+  kubectl config view --minify | grep namespace
+
+Solucion:
+  kubectl config use-context <contexto-correcto>
+  kubectl config set-context --current \
+    --namespace=<namespace-correcto>
+
+Habito critico: verificar contexto y namespace activos
+al inicio de cada bloque de trabajo en el examen.
+
+--------------------------------------------------
+CHECKPOINT - VERIFICACION DE COMPRENSION
+--------------------------------------------------
+
+Pregunta 1:
+  Que diferencia hay entre kubectl apply y kubectl create?
+
+Respuesta esperada:
+  kubectl create falla si el recurso ya existe.
+  kubectl apply crea el recurso si no existe, o actualiza
+  su configuracion si ya existe. En el examen, apply es
+  mas seguro como comando por defecto.
+
+Pregunta 2:
+  Como generarias el YAML de un CronJob sin crearlo
+  en el cluster?
+
+Respuesta esperada:
+  kubectl create cronjob mi-job \
+    --image=busybox \
+    --schedule="*/5 * * * *" \
+    -- echo hello \
+    --dry-run=client -o yaml
+
+Pregunta 3:
+  Estas en el cluster A. La siguiente pregunta requiere
+  el cluster B. Cual es el primer comando que ejecutas?
+
+Respuesta esperada:
+  kubectl config use-context <nombre-cluster-B>
+  Verificar con: kubectl config current-context
+
+Pregunta 4:
+  Un pod esta en estado CrashLoopBackOff. Cuales son
+  los dos primeros comandos que ejecutas?
+
+Respuesta esperada:
+  kubectl describe pod <nombre>     # ver seccion Events
+  kubectl logs <nombre> --previous  # ver logs del crash
+
+Pregunta 5:
+  Como verificas que el usuario 'juan' tiene permiso
+  para crear pods en el namespace 'desarrollo'?
+
+Respuesta esperada:
+  kubectl auth can-i create pods \
+    --as=juan \
+    -n desarrollo
+
+--------------------------------------------------
+LABORATORIO CRONOMETRADO
+--------------------------------------------------
+
+OBJETIVO: completar en menos de 10 minutos.
+Simula el ritmo requerido en el examen real.
+
+TAREA:
+
+1. Crea el namespace 'lab-m00'
+
+2. En ese namespace, crea un Deployment llamado
+   'nginx-lab' con imagen nginx:latest y 3 replicas
+
+3. Expone el Deployment con un Service llamado
+   'nginx-lab-svc' de tipo ClusterIP en el puerto 8080
+   mapeando al puerto 80 del contenedor
+
+4. Escala el Deployment a 5 replicas
+
+5. Obtener la imagen exacta que usan los pods del
+   Deployment y guardarla en /tmp/imagen.txt
+
+6. Verifica que todos los pods estan en estado Running
+
+CRITERIOS DE EXITO:
+
+kubectl get deployment nginx-lab -n lab-m00
+# esperado: nginx-lab  5/5  5  5
+
+kubectl get svc nginx-lab-svc -n lab-m00
+# esperado: ClusterIP  <IP>  <none>  8080/TCP
+
+cat /tmp/imagen.txt
+# esperado: nginx:latest
+
+kubectl get pods -n lab-m00 --no-headers | grep -c Running
+# esperado: 5
+
+SOLUCION DE REFERENCIA (no mirar hasta terminar):
+
+kubectl create namespace lab-m00
+
+kubectl create deployment nginx-lab \
+  --image=nginx:latest \
+  --replicas=3 \
+  -n lab-m00
+
+kubectl expose deployment nginx-lab \
+  --port=8080 \
+  --target-port=80 \
+  --name=nginx-lab-svc \
+  -n lab-m00
+
+kubectl scale deployment nginx-lab \
+  --replicas=5 \
+  -n lab-m00
+
+kubectl get deployment nginx-lab \
+  -n lab-m00 \
+  -o jsonpath='{.spec.template.spec.containers[0].image}' \
+  > /tmp/imagen.txt
+
+kubectl get pods -n lab-m00
+
+==================================================
+FIN M00 - ENTORNO DE LABORATORIO Y ESTRATEGIA CKA
+SIGUIENTE: M01 - Arquitectura de Kubernetes
+==================================================
