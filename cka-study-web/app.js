@@ -33,7 +33,6 @@ const els = {
   collapseAll: document.querySelector("#collapseAll"),
   menuButton: document.querySelector("#menuButton"),
   scrim: document.querySelector("#scrim"),
-  sourceFoot: document.querySelector("#sourceFoot"),
 };
 
 const ICONS = {
@@ -49,11 +48,8 @@ async function init() {
   updateThemeButton();
 
   try {
-    const { text, source } = await loadCourseText();
+    const { text } = await loadCourseText();
     state.modules = CourseParser.parseCourse(text);
-    if (els.sourceFoot) {
-      els.sourceFoot.innerHTML = `Fuente: <code>${escapeHtml(source)}</code><br>Edita los TXT y refresca la página.`;
-    }
 
     const remembered = state.lastPosition && state.modules.find((m) => m.id === state.lastPosition.moduleId);
     state.activeModule = remembered?.id || state.modules[0]?.id || null;
