@@ -9,6 +9,15 @@
   <meta property="og:title" content="Kestrion — Preparación CKA en español">
   <meta property="og:description" content="Quiz de autoevaluación, laboratorios cronometrados y progreso automático. Gratis, open source y sin registro.">
   <meta property="og:url" content="https://kestrion.dev/">
+  <meta property="og:image" content="https://kestrion.dev/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:locale" content="es_ES">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Kestrion — Preparación CKA en español">
+  <meta name="twitter:description" content="Quiz de autoevaluación, laboratorios cronometrados y progreso automático. Gratis, open source y sin registro.">
+  <meta name="twitter:image" content="https://kestrion.dev/og.png">
+  <link rel="canonical" href="https://kestrion.dev/">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232563eb'/%3E%3Ctext x='32' y='44' font-family='sans-serif' font-size='30' font-weight='800' fill='white' text-anchor='middle'%3EK%3C/text%3E%3C/svg%3E">
   <script>
     try {
@@ -190,6 +199,64 @@
     .foot-links a { color: var(--text-2); text-decoration: none; font-weight: 600; }
     .disclaimer { margin-top: 1.4rem; padding-top: 1.2rem; border-top: 1px solid var(--line); font-size: 0.78rem; line-height: 1.55; }
   </style>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "name": "Kestrion",
+        "url": "https://kestrion.dev/",
+        "inLanguage": "es"
+      },
+      {
+        "@type": "Course",
+        "name": "Preparación para el examen CKA (Certified Kubernetes Administrator)",
+        "description": "Curso gratuito e interactivo en español para preparar el examen CKA: quiz de autoevaluación, laboratorios cronometrados con soluciones ocultas y seguimiento de progreso.",
+        "url": "https://kestrion.dev/app/",
+        "inLanguage": "es",
+        "isAccessibleForFree": true,
+        "provider": { "@type": "Organization", "name": "Kestrion", "url": "https://kestrion.dev/" },
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+        "hasCourseInstance": {
+          "@type": "CourseInstance",
+          "courseMode": "online",
+          "courseWorkload": "PT20H"
+        }
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "¿Es gratis de verdad?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Sí. El curso completo y todas las funciones de estudio son gratuitos y el código es open source. Si en el futuro añadimos material premium (simulacros extra, módulos avanzados), lo gratuito seguirá siéndolo." }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Necesito registrarme?",
+            "acceptedAnswer": { "@type": "Answer", "text": "No. No hay cuentas ni emails: tu progreso se guarda en el almacenamiento local de tu navegador. Entras y estudias." }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Necesito un cluster para practicar?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Para los laboratorios, sí — el módulo M00 te guía para montar tu entorno de práctica (K3s o kubeadm) paso a paso. Es la misma filosofía del examen: todo se aprende ejecutando." }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Está actualizado con el examen actual?",
+            "acceptedAnswer": { "@type": "Answer", "text": "El contenido sigue el formato vigente del examen CKA y se revisa con cada versión de Kubernetes. La fecha de última actualización siempre está visible en el repositorio." }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Quién está detrás de Kestrion?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Kestrion es un proyecto educativo independiente. No está afiliado a The Linux Foundation ni a la CNCF. ¿Dudas o sugerencias? Escríbenos: contacto@kestrion.dev." }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
 
