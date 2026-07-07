@@ -161,6 +161,26 @@
     .card h3 { margin: 0.5rem 0 0.35rem; font-size: 1.02rem; }
     .card p { margin: 0; color: var(--text-2); font-size: 0.92rem; }
 
+    /* ruta de certificaciones (sección "por qué") */
+    .cert-path { display: flex; align-items: stretch; justify-content: center; gap: 0.6rem; margin-top: 2rem; flex-wrap: wrap; }
+    .cert {
+      flex: 1 1 0; min-width: 11rem; max-width: 16rem;
+      border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 1rem 1.1rem;
+      text-align: center;
+    }
+    .cert .cert-code { font-weight: 800; font-size: 1.05rem; letter-spacing: -0.01em; }
+    .cert .cert-name { display: block; color: var(--muted); font-size: 0.8rem; font-weight: 600; margin-top: 0.15rem; }
+    .cert .cert-desc { margin: 0.5rem 0 0; color: var(--text-2); font-size: 0.85rem; }
+    .cert.here { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 8px 24px rgba(37, 99, 235, 0.15); }
+    .cert.here .cert-code { color: var(--accent-strong); }
+    .cert-tag { display: inline-block; margin-bottom: 0.4rem; padding: 0.1rem 0.6rem; border-radius: 999px; background: var(--accent); color: #fff; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
+    .cert-arrow { align-self: center; color: var(--muted); font-size: 1.3rem; font-weight: 800; }
+    @media (max-width: 720px) {
+      .cert-path { flex-direction: column; align-items: stretch; }
+      .cert { max-width: none; }
+      .cert-arrow { transform: rotate(90deg); text-align: center; }
+    }
+
     .steps { counter-reset: paso; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
     @media (max-width: 860px) { .steps { grid-template-columns: 1fr; } }
     .step { position: relative; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 1.2rem 1.25rem 1.2rem 3.4rem; }
@@ -265,6 +285,7 @@
     <div class="wrap nav-inner">
       <a class="logo" href="./"><span class="logo-mark">K</span>Kestrion</a>
       <nav class="nav-links">
+        <a href="#por-que">Por qué</a>
         <a href="#funciones">Funciones</a>
         <a href="#modulos">Módulos</a>
         <a href="#faq">FAQ</a>
@@ -332,7 +353,39 @@
       </div>
     </div>
 
-    <section id="funciones">
+    <section id="por-que">
+      <div class="wrap">
+        <h2 class="section-title">¿Y por qué el CKA?</h2>
+        <p class="section-sub">Si acabas de llegar y no sabes qué es esto: Kubernetes es la plataforma sobre la que hoy corre el software moderno, y el CKA es la certificación que demuestra que sabes administrarla.</p>
+        <div class="grid-3">
+          <div class="card"><span class="ico">☸️</span><h3>Kubernetes es el estándar</h3><p>Las aplicaciones modernas se ejecutan en contenedores, y Kubernetes es el sistema que los orquesta a escala: desde microservicios hasta el entrenamiento y despliegue de modelos de IA. El 96% de las organizaciones ya lo usan o lo están evaluando (CNCF).</p></div>
+          <div class="card"><span class="ico">🚪</span><h3>Abre puertas reales</h3><p>El CKA es una de las certificaciones más demandadas del mundo cloud: es el requisito habitual en ofertas de DevOps, SRE y platform engineering. Y a diferencia de un test de memorizar, es 100% práctica — se resuelve en una terminal real.</p></div>
+          <div class="card"><span class="ico">🧭</span><h3>El punto de entrada serio</h3><p>Existen varias certificaciones de Kubernetes, pero el CKA es la que marca la diferencia en un CV: certifica que administras clusters de verdad, no que conoces la teoría. Desde ahí puedes especializarte en seguridad con la CKS.</p></div>
+        </div>
+        <div class="cert-path" aria-label="Ruta de certificaciones de Kubernetes">
+          <div class="cert">
+            <span class="cert-code">KCNA</span>
+            <span class="cert-name">Kubernetes and Cloud Native Associate</span>
+            <p class="cert-desc">Nivel inicial: conceptos y ecosistema. Test teórico.</p>
+          </div>
+          <div class="cert-arrow" aria-hidden="true">→</div>
+          <div class="cert here">
+            <span class="cert-tag">Estás aquí</span><br>
+            <span class="cert-code">CKA</span>
+            <span class="cert-name">Certified Kubernetes Administrator</span>
+            <p class="cert-desc">Administración real de clusters. Examen práctico en terminal.</p>
+          </div>
+          <div class="cert-arrow" aria-hidden="true">→</div>
+          <div class="cert">
+            <span class="cert-code">CKS</span>
+            <span class="cert-name">Certified Kubernetes Security Specialist</span>
+            <p class="cert-desc">Especialización en seguridad. Requiere el CKA vigente.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="funciones" style="padding-top: 0;">
       <div class="wrap">
         <h2 class="section-title">Estudiar leyendo no aprueba el CKA. Esto sí.</h2>
         <p class="section-sub">Cada función existe por una razón: el examen son 15–20 tareas reales en terminal, en 2 horas, repartidas en varios clusters.</p>

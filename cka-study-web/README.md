@@ -22,11 +22,11 @@ modulos/
 
 ### Cómo descubre la web los módulos (tres fuentes, en orden)
 
-1. **`modulos/index.json`** — manifiesto con la lista de ficheros, generado por `cka-study-web/build-manifest.sh`. Es lo que permite desplegar en **hosting estático** (Cloudflare Pages, GitHub Pages...), donde el servidor no genera listados de directorio. En Cloudflare Pages: comando de build = `bash cka-study-web/build-manifest.sh`.
+1. **`modulos/index.json`** — manifiesto con la lista de ficheros, generado por `cka-study-web/build-manifest.sh`. Es lo que permite desplegar en **hosting estático**, donde el servidor no genera listados de directorio. En producción lo regenera `build.sh` (raíz del repo) en cada despliegue.
 2. **Listado de directorio** de `modulos/` — lo genera el `python http.server` de `start.sh`; cubre el uso local aunque el manifiesto falte o esté vacío.
 3. **`CURSO-CKA-claude.txt`** — TXT único original, último recurso.
 
-Si el manifiesto lista un fichero que ya no existe, ese fichero se omite (aviso en la consola del navegador) sin tumbar la carga. El pie del índice lateral muestra qué fuente se usó (`índice` o `listado`).
+Si el manifiesto lista un fichero que ya no existe, ese fichero se omite (aviso en la consola del navegador) sin tumbar la carga.
 
 ## Abrir
 
