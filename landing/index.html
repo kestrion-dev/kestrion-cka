@@ -394,7 +394,7 @@
           </details>
           <details>
             <summary>¿Quién está detrás de Kestrion?</summary>
-            <div class="a">Kestrion es un proyecto educativo independiente. No está afiliado a The Linux Foundation ni a la CNCF. ¿Dudas o sugerencias? Escríbenos: <a href="mailto:contacto@kestrion.dev">contacto@kestrion.dev</a>.</div>
+            <div class="a">Kestrion es un proyecto educativo independiente. No está afiliado a The Linux Foundation ni a la CNCF. ¿Dudas o sugerencias? Escríbenos: <a href="#" class="obf-email" data-user="contacto" data-domain="kestrion.dev">(activa JavaScript para ver el email)</a>.</div>
           </details>
         </div>
       </div>
@@ -416,7 +416,7 @@
         <nav class="foot-links">
           <a href="./app/" data-app-link>La app</a>
           <a href="https://github.com/kestrion-dev/kestrion-cka" rel="noopener">GitHub</a>
-          <a href="mailto:contacto@kestrion.dev">Contacto</a>
+          <a href="#" class="obf-email" data-user="contacto" data-domain="kestrion.dev">(activa JS)</a>
         </nav>
       </div>
       <!-- Espacio reservado para futuros bloques: banner/afiliados y servicio de consultoría. -->
@@ -443,6 +443,12 @@
           document.querySelector("[data-continue]").hidden = false;
         }
       } catch (e) { /* sin localStorage */ }
+
+      document.querySelectorAll(".obf-email").forEach((a) => {
+        const email = `${a.dataset.user}@${a.dataset.domain}`;
+        a.href = `mailto:${email}`;
+        a.textContent = email;
+      });
     })();
   </script>
 </body>
