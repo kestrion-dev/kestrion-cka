@@ -1,14 +1,9 @@
+// Configuración de despliegue en Cloudflare (Workers con assets estáticos).
+// El build (bash build.sh) genera dist/ y `npx wrangler deploy` lo publica.
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "kestrion-cka",
-  "compatibility_date": "2026-07-07",
-  "observability": {
-    "enabled": true
-  },
+  "compatibility_date": "2026-07-01",
   "assets": {
-    "directory": "cka-study-web"
-  },
-  "compatibility_flags": [
-    "nodejs_compat"
-  ]
+    "directory": "./dist"
+  }
 }

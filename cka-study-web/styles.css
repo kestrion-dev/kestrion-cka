@@ -379,17 +379,6 @@ h1, h2, h3, p {
   overflow-wrap: anywhere;
 }
 
-.sidebar-foot {
-  margin: auto 0 0;
-  padding-top: 1rem;
-  color: var(--muted);
-  font-size: 0.72rem;
-  line-height: 1.5;
-}
-
-.sidebar-foot code {
-  font-size: 0.7rem;
-}
 
 .scrim {
   display: none;
@@ -1010,7 +999,6 @@ code {
 }
 
 .text-block code,
-.sidebar-foot code,
 .empty code {
   padding: 0.08rem 0.3rem;
   border-radius: 5px;
