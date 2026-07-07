@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Política de privacidad — Kestrion</title>
+  <meta name="robots" content="noindex, follow">
+  <link rel="canonical" href="https://kestrion.dev/politica-privacidad.html">
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f8fc; --bg-soft: #eef3fb; --panel: #ffffff;
+      --text: #101a2e; --text-2: #45526c; --muted: #68758f;
+      --line: #dfe6f2; --accent: #2563eb; --accent-strong: #1d4ed8;
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0b1220; --bg-soft: #0e1730; --panel: #111c33;
+      --text: #e7edf9; --text-2: #b6c2d9; --muted: #8b98b3;
+      --line: #223252; --accent: #4f83f1; --accent-strong: #78a2f5;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --bg: #0b1220; --bg-soft: #0e1730; --panel: #111c33;
+        --text: #e7edf9; --text-2: #b6c2d9; --muted: #8b98b3;
+        --line: #223252; --accent: #4f83f1; --accent-strong: #78a2f5;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.65; }
+    a { color: var(--accent-strong); }
+    .wrap { max-width: 46rem; margin: 0 auto; padding: 0 1.25rem; }
+    .nav { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+    .nav-inner { display: flex; align-items: center; gap: 1.4rem; padding: 0.7rem 0; max-width: 68rem; margin: 0 auto; padding-left: 1.25rem; padding-right: 1.25rem; }
+    .logo { display: flex; align-items: center; gap: 0.55rem; font-weight: 800; font-size: 1.05rem; color: var(--text); text-decoration: none; }
+    .logo-mark { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 800; font-size: 1rem; }
+    main { padding: 3rem 0 4rem; }
+    h1 { font-size: 1.9rem; letter-spacing: -0.02em; margin: 0 0 0.4rem; }
+    .updated { color: var(--muted); font-size: 0.85rem; margin: 0 0 2.2rem; }
+    h2 { font-size: 1.15rem; margin: 2rem 0 0.6rem; }
+    p { color: var(--text-2); margin: 0 0 1rem; }
+    ul { color: var(--text-2); margin: 0 0 1rem; padding-left: 1.3rem; }
+    li { margin: 0 0 0.4rem; }
+    code { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 5px; padding: 0.05rem 0.35rem; font-size: 0.9em; }
+    footer { padding: 2rem 0 2.8rem; color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--line); margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="logo" href="./"><span class="logo-mark">K</span>Kestrion</a>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <h1>Política de privacidad</h1>
+    <p class="updated">Última actualización: julio de 2026</p>
+
+    <h2>Resumen</h2>
+    <p>Kestrion no usa cookies, no requiere registro y no recopila datos personales para el funcionamiento del curso. Tu progreso de estudio se guarda únicamente en tu propio navegador.</p>
+
+    <h2>Qué datos se guardan y dónde</h2>
+    <p>La aplicación de estudio guarda en el <code>localStorage</code> de tu navegador (no en ningún servidor):</p>
+    <ul>
+      <li>Las secciones que has marcado como completadas.</li>
+      <li>Tu preferencia de tema (claro/oscuro).</li>
+      <li>El módulo y la sección donde te quedaste, para poder continuar.</li>
+    </ul>
+    <p>Estos datos permanecen en tu dispositivo, no se transmiten a Kestrion ni a terceros, y se borran si limpias los datos del navegador para este sitio.</p>
+
+    <h2>Analítica</h2>
+    <p>Usamos Cloudflare Web Analytics, un servicio de estadísticas agregadas y anónimas que no utiliza cookies ni huellas digitales (fingerprinting) y no permite identificar a visitantes individuales. Sirve únicamente para conocer el volumen de visitas y páginas más consultadas.</p>
+
+    <h2>Correo de contacto</h2>
+    <p>Si nos escribes a <a href="#" class="obf-email" data-user="contacto" data-domain="kestrion.dev">(activa JS)</a>, tu dirección de correo y el contenido del mensaje se usan exclusivamente para responderte, y no se ceden a terceros.</p>
+
+    <h2>Tus derechos</h2>
+    <p>Como no almacenamos datos personales en servidores propios, no hay perfiles ni bases de datos sobre los que ejercer derechos de acceso, rectificación o supresión más allá del propio navegador (tú controlas directamente ese almacenamiento, borrándolo cuando quieras). Para cualquier duda sobre esta política, escríbenos al correo de contacto indicado arriba.</p>
+
+    <h2>Cambios en esta política</h2>
+    <p>Si el proyecto incorpora en el futuro nuevos servicios que impliquen tratamiento de datos personales, esta página se actualizará para reflejarlo antes de su entrada en vigor.</p>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      © 2026 Kestrion · <a href="./">Volver al inicio</a> · <a href="./aviso-legal.html">Aviso legal</a>
+    </div>
+  </footer>
+
+  <script>
+    document.querySelectorAll(".obf-email").forEach((a) => {
+      const email = `${a.dataset.user}@${a.dataset.domain}`;
+      a.href = `mailto:${email}`;
+      a.textContent = email;
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aviso legal — Kestrion</title>
+  <meta name="robots" content="noindex, follow">
+  <link rel="canonical" href="https://kestrion.dev/aviso-legal.html">
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f8fc; --bg-soft: #eef3fb; --panel: #ffffff;
+      --text: #101a2e; --text-2: #45526c; --muted: #68758f;
+      --line: #dfe6f2; --accent: #2563eb; --accent-strong: #1d4ed8;
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0b1220; --bg-soft: #0e1730; --panel: #111c33;
+      --text: #e7edf9; --text-2: #b6c2d9; --muted: #8b98b3;
+      --line: #223252; --accent: #4f83f1; --accent-strong: #78a2f5;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --bg: #0b1220; --bg-soft: #0e1730; --panel: #111c33;
+        --text: #e7edf9; --text-2: #b6c2d9; --muted: #8b98b3;
+        --line: #223252; --accent: #4f83f1; --accent-strong: #78a2f5;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.65; }
+    a { color: var(--accent-strong); }
+    .wrap { max-width: 46rem; margin: 0 auto; padding: 0 1.25rem; }
+    .nav { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+    .nav-inner { display: flex; align-items: center; gap: 1.4rem; padding: 0.7rem 0; max-width: 68rem; margin: 0 auto; padding-left: 1.25rem; padding-right: 1.25rem; }
+    .logo { display: flex; align-items: center; gap: 0.55rem; font-weight: 800; font-size: 1.05rem; color: var(--text); text-decoration: none; }
+    .logo-mark { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 800; font-size: 1rem; }
+    main { padding: 3rem 0 4rem; }
+    h1 { font-size: 1.9rem; letter-spacing: -0.02em; margin: 0 0 0.4rem; }
+    .updated { color: var(--muted); font-size: 0.85rem; margin: 0 0 2.2rem; }
+    h2 { font-size: 1.15rem; margin: 2rem 0 0.6rem; }
+    p { color: var(--text-2); margin: 0 0 1rem; }
+    footer { padding: 2rem 0 2.8rem; color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--line); margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="logo" href="./"><span class="logo-mark">K</span>Kestrion</a>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <h1>Aviso legal</h1>
+    <p class="updated">Última actualización: julio de 2026</p>
+
+    <h2>Titularidad</h2>
+    <p>Este sitio web (kestrion.dev) es un proyecto educativo independiente publicado bajo la marca Kestrion. Para cualquier consulta sobre la titularidad o el contenido, puedes escribir a <a href="#" class="obf-email" data-user="contacto" data-domain="kestrion.dev">(activa JS)</a>.</p>
+
+    <h2>Objeto</h2>
+    <p>Kestrion ofrece contenido educativo gratuito para la preparación del examen de certificación CKA (Certified Kubernetes Administrator). El acceso y uso del sitio son gratuitos y no requieren registro.</p>
+
+    <h2>Propiedad intelectual</h2>
+    <p>El código de la aplicación web es software libre bajo licencia MIT. El contenido del curso (textos, ejercicios y material didáctico) es © Kestrion y se distribuye para uso personal de estudio; queda prohibida su republicación o uso comercial sin autorización. Consulta el repositorio público para el detalle de las licencias.</p>
+
+    <h2>Marcas de terceros</h2>
+    <p>Kubernetes® y CKA® (Certified Kubernetes Administrator) son marcas registradas de The Linux Foundation en Estados Unidos y otros países. Kestrion es un proyecto educativo independiente y no está afiliado, asociado ni respaldado por The Linux Foundation ni por la Cloud Native Computing Foundation (CNCF).</p>
+
+    <h2>Exclusión de responsabilidad</h2>
+    <p>El contenido se ofrece con fines formativos "tal cual", sin garantía de que su estudio asegure la superación del examen oficial CKA, cuyo contenido y formato dependen exclusivamente de The Linux Foundation.</p>
+
+    <h2>Contacto</h2>
+    <p>Para dudas, sugerencias o solicitudes relacionadas con este sitio: <a href="#" class="obf-email" data-user="contacto" data-domain="kestrion.dev">(activa JS)</a>.</p>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      © 2026 Kestrion · <a href="./">Volver al inicio</a> · <a href="./politica-privacidad.html">Política de privacidad</a>
+    </div>
+  </footer>
+
+  <script>
+    document.querySelectorAll(".obf-email").forEach((a) => {
+      const email = `${a.dataset.user}@${a.dataset.domain}`;
+      a.href = `mailto:${email}`;
+      a.textContent = email;
+    });
+  </script>
+</body>
+</html>
