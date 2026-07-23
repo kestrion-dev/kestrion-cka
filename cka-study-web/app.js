@@ -232,7 +232,7 @@ function onDocumentClick(event) {
   if (revealButton) {
     revealButton.closest(".spoiler")?.classList.toggle("open");
     return;
-  }
+  }https://cka.kestrion.dev
 
   const timerButton = event.target.closest("[data-timer-action]");
   if (timerButton) {
