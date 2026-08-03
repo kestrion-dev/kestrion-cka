@@ -4,7 +4,7 @@ El material de estudio de esta carpeta (los módulos del curso de
 preparación CKA) es propiedad de Kestrion.
 
 PERMITIDO sin autorización previa:
-  - Estudiar con este material, en la web (kestrion.dev) o clonando
+  - Estudiar con este material, en la web (cka.kestrion.dev) o clonando
     el repositorio para uso personal y privado.
 
 NO PERMITIDO sin autorización escrita:

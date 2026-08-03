@@ -2,7 +2,7 @@
 
 Web de estudio interactiva y gratuita para el examen **CKA (Certified Kubernetes Administrator)**, en español.
 
-**➡️ Estudia en [kestrion.dev](https://kestrion.dev)** — sin registro, directamente en el navegador.
+**➡️ Estudia en [cka.kestrion.dev](https://cka.kestrion.dev)** — sin registro, directamente en el navegador.
 
 ## Por qué existe
 
@@ -17,8 +17,8 @@ El CKA es un examen 100 % práctico y contra el reloj. Leer PDFs no entrena eso.
 ## Estructura
 
 ```
-landing/          Página de inicio (kestrion.dev)
-cka-study-web/    La app de estudio (kestrion.dev/app)
+landing/          Página de inicio (cka.kestrion.dev)
+cka-study-web/    La app de estudio (cka.kestrion.dev/app)
 modulos/          Contenido del curso: un TXT por módulo (M00, M01, ...)
 build.sh          Ensambla dist/ para el despliegue (Cloudflare Pages)
 ```
