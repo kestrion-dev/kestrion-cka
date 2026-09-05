@@ -215,9 +215,91 @@ function renderPage(entry, prev, next) {
 `;
 }
 
+// Página índice de /modulos/: sin ella esa ruta da 404 (solo hay .txt sueltos
+// y las carpetas por módulo). Sirve de página "hub" que enlaza a los 6
+// módulos — buena práctica de enlazado interno además de tapar el 404.
+function renderIndexPage(entries) {
+  const esc = render.escapeHtml;
+  const canonical = `${SITE_URL}/modulos/`;
+  const items = entries.map((entry) => {
+    const title = render.cleanModuleTitle(entry.module);
+    return `<a class="mod" href="./${entry.slug}/"><span class="mod-code">${esc(entry.module.code)}</span><span class="mod-title">${esc(title)}</span></a>`;
+  }).join("\n          ");
+
+  return `<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Módulos del curso CKA — Kestrion</title>
+    <meta name="description" content="Los 6 módulos del curso CKA en español: arquitectura, kubeadm, RBAC, Helm/Kustomize/CRDs, Deployments/DaemonSets/StatefulSets y más, cada uno con su propia guía.">
+    <link rel="canonical" href="${canonical}">
+    <link rel="icon" href="${FAVICON}">
+    <script>
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem("cka.theme")
+          || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      } catch (error) { /* sin localStorage: tema claro */ }
+    </script>
+    <link rel="stylesheet" href="../app/styles.css">
+    <style>
+      body { display: block; }
+      .page-header, .page-main, .page-footer { max-width: 68rem; margin: 0 auto; padding-left: clamp(1rem, 3.5vw, 3rem); padding-right: clamp(1rem, 3.5vw, 3rem); }
+      .page-header { display: flex; align-items: center; padding-top: 1.1rem; }
+      .page-logo { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 800; color: var(--text); text-decoration: none; font-size: 1.05rem; }
+      .page-logo-mark { display: inline-flex; align-items: center; justify-content: center; width: 1.6rem; height: 1.6rem; border-radius: 8px; background: var(--accent); color: #fff; font-size: 0.85rem; font-weight: 800; }
+      .page-main { padding-top: 1.5rem; padding-bottom: 3rem; }
+      .page-main h1 { margin: 0 0 0.4rem; font-size: clamp(1.4rem, 3vw, 2rem); }
+      .page-main .lead { margin: 0 0 1.6rem; color: var(--text-2); max-width: 46rem; }
+      .mod-list { display: grid; gap: 0.6rem; }
+      .mod { display: flex; align-items: center; gap: 0.9rem; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 0.8rem 1rem; text-decoration: none; color: inherit; transition: border-color 150ms ease, background 150ms ease; }
+      .mod:hover { border-color: var(--accent-border); background: var(--accent-soft); }
+      .mod-code { flex: 0 0 auto; padding: 0.2rem 0.55rem; border-radius: 7px; background: var(--accent-soft); color: var(--accent-strong); font-weight: 800; font-size: 0.8rem; }
+      .mod-title { font-weight: 650; font-size: 0.95rem; }
+      .app-cta { margin-top: 1.4rem; padding: 1rem 1.2rem; border-radius: 12px; background: var(--accent-soft); border: 1px solid var(--accent-border); color: var(--text); font-size: 0.94rem; }
+      .app-cta a { color: var(--accent-strong); font-weight: 700; text-decoration: none; }
+      .app-cta a:hover { text-decoration: underline; }
+      .page-footer { padding-top: 1.5rem; padding-bottom: 2.5rem; border-top: 1px solid var(--line); }
+      .page-footer .foot-links { display: flex; gap: 1.1rem; flex-wrap: wrap; margin-bottom: 0.8rem; }
+      .page-footer .foot-links a { color: var(--text-2); text-decoration: none; font-size: 0.88rem; }
+      .page-footer .foot-links a:hover { color: var(--accent); }
+      .page-footer .foot-copy { margin: 0; color: var(--muted); font-size: 0.78rem; line-height: 1.5; }
+    </style>
+  </head>
+  <body>
+    <header class="page-header">
+      <a class="page-logo" href="../"><span class="page-logo-mark">K</span> Kestrion</a>
+    </header>
+    <main class="page-main">
+      <h1>Módulos del curso CKA</h1>
+      <p class="lead">Seis módulos publicados, en español, con contenido completo en cada página. El resto del temario oficial (Networking, Storage, Troubleshooting) está en desarrollo.</p>
+      <div class="mod-list">
+          ${items}
+      </div>
+      <p class="app-cta">🔧 ¿Prefieres estudiar con quiz oculto, temporizador y progreso guardado? <a href="../app/">Ábrelo en la app interactiva →</a></p>
+    </main>
+    <footer class="page-footer">
+      <nav class="foot-links">
+        <a href="../app/">App interactiva</a>
+        <a href="https://github.com/kestrion-dev/kestrion-cka" rel="noopener">GitHub</a>
+        <a href="../aviso-legal">Aviso legal</a>
+        <a href="../politica-privacidad">Privacidad</a>
+      </nav>
+      <p class="foot-copy">
+        Kubernetes® y CKA® (Certified Kubernetes Administrator) son marcas registradas de The Linux Foundation en Estados Unidos y otros países.
+        Kestrion es un proyecto educativo independiente y no está afiliado, asociado ni respaldado por The Linux Foundation ni por la Cloud Native Computing Foundation.
+        © ${new Date().getFullYear()} Kestrion.
+      </p>
+    </footer>
+  </body>
+</html>
+`;
+}
+
 function writeSitemap(entries) {
   const urls = [
     { loc: `${SITE_URL}/`, changefreq: "weekly", priority: "1.0" },
+    { loc: `${SITE_URL}/modulos/`, changefreq: "weekly", priority: "0.6" },
     ...entries.map((entry) => ({
       loc: `${SITE_URL}/modulos/${entry.slug}/`,
       changefreq: "monthly",
@@ -247,6 +329,10 @@ function main() {
     fs.writeFileSync(path.join(outDir, "index.html"), html);
     console.log(`dist/modulos/${entry.slug}/index.html`);
   });
+
+  const indexHtml = renderIndexPage(parsedModules);
+  fs.writeFileSync(path.join(DIST_DIR, "modulos", "index.html"), indexHtml);
+  console.log("dist/modulos/index.html");
 
   writeSitemap(parsedModules);
 }
