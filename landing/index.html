@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Kestrion — Preparación CKA en español, gratis e interactiva</title>
   <meta name="google-site-verification" content="pB5pC48I37ulD8DxXKvTUqZiJ7phSymOHAmX5zw8-xI" />
-  <meta name="description" content="Entrena el examen CKA como se hace de verdad: quiz con respuestas ocultas, laboratorios cronometrados y seguimiento de progreso. Curso gratuito, en español y sin registro.">
+  <meta name="description" content="Prepara el examen CKA en español: quiz con respuestas ocultas, laboratorios cronometrados y seguimiento de progreso. Seis módulos gratis, sin registro.">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Kestrion — Preparación CKA en español">
-  <meta property="og:description" content="Quiz de autoevaluación, laboratorios cronometrados y progreso automático. Gratis, open source y sin registro.">
+  <meta property="og:description" content="Quiz con respuestas ocultas, laboratorios cronometrados y seguimiento de progreso. Seis módulos gratis, en español y sin registro.">
   <meta property="og:url" content="https://cka.kestrion.dev/">
   <meta property="og:image" content="https://cka.kestrion.dev/og.png">
   <meta property="og:image:width" content="1200">
@@ -16,7 +16,7 @@
   <meta property="og:locale" content="es_ES">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Kestrion — Preparación CKA en español">
-  <meta name="twitter:description" content="Quiz de autoevaluación, laboratorios cronometrados y progreso automático. Gratis, open source y sin registro.">
+  <meta name="twitter:description" content="Quiz con respuestas ocultas, laboratorios cronometrados y seguimiento de progreso. Seis módulos gratis, en español y sin registro.">
   <meta name="twitter:image" content="https://cka.kestrion.dev/og.png">
   <link rel="canonical" href="https://cka.kestrion.dev/">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232563eb'/%3E%3Ctext x='32' y='44' font-family='sans-serif' font-size='30' font-weight='800' fill='white' text-anchor='middle'%3EK%3C/text%3E%3C/svg%3E">
@@ -197,11 +197,14 @@
     .mod {
       display: flex; align-items: center; gap: 0.9rem;
       border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 0.8rem 1rem;
+      text-decoration: none; color: inherit; transition: border-color 150ms ease, background 150ms ease;
     }
+    a.mod:hover { border-color: var(--accent-border); background: var(--accent-soft); }
     .mod-code { flex: 0 0 auto; padding: 0.2rem 0.55rem; border-radius: 7px; background: var(--accent-soft); color: var(--accent-strong); font-weight: 800; font-size: 0.8rem; }
     .mod-title { font-weight: 650; font-size: 0.95rem; }
     .mod.soon { border-style: dashed; color: var(--muted); }
     .mod.soon .mod-code { background: transparent; border: 1px dashed var(--line); color: var(--muted); }
+    .mod-status { margin: 1rem 0 0; color: var(--text-2); font-size: 0.92rem; max-width: 46rem; line-height: 1.55; }
 
     .faq details { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 0; margin-bottom: 0.6rem; }
     .faq summary { padding: 0.9rem 1.1rem; cursor: pointer; font-weight: 700; list-style: none; }
@@ -266,7 +269,7 @@
           {
             "@type": "Question",
             "name": "¿Está actualizado con el examen actual?",
-            "acceptedAnswer": { "@type": "Answer", "text": "El contenido sigue el formato vigente del examen CKA y se revisa con cada versión de Kubernetes. La fecha de última actualización siempre está visible en el repositorio." }
+            "acceptedAnswer": { "@type": "Answer", "text": "El temario sigue los dominios oficiales del examen CKA con Kubernetes v1.35. Ahora mismo cubre Cluster Architecture y Workloads & Scheduling (40% del examen); Networking, Storage y Troubleshooting están en desarrollo. La fecha de última revisión aparece en la sección de módulos." }
           },
           {
             "@type": "Question",
@@ -321,7 +324,7 @@
         <div class="mock" aria-hidden="true">
           <div class="mock-bar">
             <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-            <span class="mock-url">cka.kestrion.dev/app</span>
+            <span class="mock-url">kestrion.dev/app</span>
           </div>
           <div class="mock-body">
             <div class="mock-progress">
@@ -415,14 +418,22 @@
     <section id="modulos" style="padding-top: 0;">
       <div class="wrap">
         <h2 class="section-title">Módulos disponibles</h2>
-        <p class="section-sub">El curso crece de forma continua — cada módulo nuevo aparece aquí y en la app automáticamente.</p>
+        <p class="section-sub">Seis módulos publicados, con página propia y contenido completo; el resto del temario está en desarrollo activo.</p>
         <div class="mod-list">
-          <div class="mod"><span class="mod-code">M00</span><span class="mod-title">Entorno de laboratorio, kubectl avanzado y estrategia de examen</span></div>
-          <div class="mod"><span class="mod-code">M01</span><span class="mod-title">Arquitectura de Kubernetes</span></div>
-          <div class="mod"><span class="mod-code">M02</span><span class="mod-title">Instalación y configuración con kubeadm</span></div>
-          <div class="mod"><span class="mod-code">M03</span><span class="mod-title">RBAC y seguridad del cluster</span></div>
-          <div class="mod soon"><span class="mod-code">M04+</span><span class="mod-title">Networking, almacenamiento, troubleshooting… en camino</span></div>
+          <a class="mod" href="./modulos/entorno-kubectl/"><span class="mod-code">M00</span><span class="mod-title">Entorno de laboratorio, kubectl avanzado y estrategia de examen</span></a>
+          <a class="mod" href="./modulos/arquitectura-kubernetes/"><span class="mod-code">M01</span><span class="mod-title">Arquitectura de Kubernetes</span></a>
+          <a class="mod" href="./modulos/kubeadm-instalacion-upgrade-etcd/"><span class="mod-code">M02</span><span class="mod-title">Instalación y configuración con kubeadm</span></a>
+          <a class="mod" href="./modulos/rbac-seguridad-kubernetes/"><span class="mod-code">M03</span><span class="mod-title">RBAC y seguridad del cluster</span></a>
+          <a class="mod" href="./modulos/helm-kustomize-crds/"><span class="mod-code">M03b</span><span class="mod-title">Helm, Kustomize, CRDs y Operators</span></a>
+          <a class="mod" href="./modulos/deployments-daemonsets-statefulsets/"><span class="mod-code">M04</span><span class="mod-title">Deployments, DaemonSets y StatefulSets</span></a>
+          <div class="mod soon"><span class="mod-code">·</span><span class="mod-title">Services &amp; Networking (20% del examen) — en desarrollo</span></div>
+          <div class="mod soon"><span class="mod-code">·</span><span class="mod-title">Storage (10% del examen) — en desarrollo</span></div>
+          <div class="mod soon"><span class="mod-code">·</span><span class="mod-title">Troubleshooting (30% del examen) — en desarrollo</span></div>
         </div>
+        <p class="mod-status">
+          Cobertura actual: <strong>Cluster Architecture (25%)</strong> y <strong>Workloads &amp; Scheduling (15%)</strong> del temario oficial — 40% del examen, verificado para <strong>Kubernetes v1.35</strong>.
+          Pendiente: Services &amp; Networking, Storage y Troubleshooting (60% restante). Última revisión de contenido: 5 de septiembre de 2026.
+        </p>
       </div>
     </section>
 
@@ -444,7 +455,7 @@
           </details>
           <details>
             <summary>¿Está actualizado con el examen actual?</summary>
-            <div class="a">El contenido sigue el formato vigente del examen CKA y se revisa con cada versión de Kubernetes. La fecha de última actualización siempre está visible en el repositorio.</div>
+            <div class="a">El temario sigue los dominios oficiales del examen CKA con Kubernetes v1.35. Ahora mismo cubre Cluster Architecture y Workloads &amp; Scheduling (40% del examen); Networking, Storage y Troubleshooting están en desarrollo. La fecha de última revisión aparece en la sección de módulos.</div>
           </details>
           <details>
             <summary>¿Quién está detrás de Kestrion?</summary>

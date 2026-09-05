@@ -428,3 +428,7 @@ const CourseParser = (() => {
 
   return { parseCourse, slug };
 })();
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = CourseParser;
+}
