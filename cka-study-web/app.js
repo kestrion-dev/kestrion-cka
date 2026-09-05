@@ -202,13 +202,13 @@ function bindEvents() {
 function onDocumentClick(event) {
   const copyButton = event.target.closest("[data-copy]");
   if (copyButton) {
-    const code = copyButton.closest(".code-panel")?.querySelector("code")?.textContent || "";
+    const code = copyButton.closest(".code-panel")?.querySelector("[data-copy-source]")?.textContent || "";
     navigator.clipboard.writeText(code).then(() => {
       copyButton.classList.add("copied");
       copyButton.textContent = "Copiado";
       setTimeout(() => {
         copyButton.classList.remove("copied");
-        copyButton.textContent = "Copiar";
+        copyButton.textContent = copyButton.dataset.copyLabel || "Copiar";
       }, 1200);
     });
     return;
@@ -359,8 +359,11 @@ function toggleDone(sectionId) {
     card.classList.toggle("done", Boolean(state.progress[sectionId]));
     const button = card.querySelector("[data-done]");
     if (button) {
-      button.classList.toggle("on", Boolean(state.progress[sectionId]));
-      button.title = state.progress[sectionId] ? "Estudiada — clic para desmarcar" : "Marcar como estudiada";
+      const isDone = Boolean(state.progress[sectionId]);
+      button.classList.toggle("on", isDone);
+      button.title = isDone ? "Estudiada — clic para desmarcar" : "Marcar como estudiada";
+      button.setAttribute("aria-label", button.title);
+      button.setAttribute("aria-pressed", String(isDone));
     }
   }
   renderNav();
@@ -422,7 +425,7 @@ function renderOverview() {
     acc.done += done;
     acc.total += total;
     acc.quiz += countBlocks(module, (b) => b.type === "quiz");
-    acc.code += countBlocks(module, (b) => b.type === "code");
+    acc.code += countBlocks(module, (b) => b.type === "code" && typeof b.copyText === "string");
     return acc;
   }, { done: 0, total: 0, quiz: 0, code: 0 });
 
@@ -438,7 +441,6 @@ function renderOverview() {
     <article class="stat-card">
       <span class="stat-label">Módulos</span>
       <strong class="stat-value">${state.modules.length}</strong>
-      <span class="stat-foot">detectados en el TXT</span>
     </article>
     <article class="stat-card">
       <span class="stat-label">Preguntas de repaso</span>
@@ -446,9 +448,9 @@ function renderOverview() {
       <span class="stat-foot">en los checkpoints</span>
     </article>
     <article class="stat-card">
-      <span class="stat-label">Bloques de comandos</span>
+      <span class="stat-label">Bloques copiables</span>
       <strong class="stat-value">${totals.code}</strong>
-      <span class="stat-foot">listos para copiar</span>
+      <span class="stat-foot">con copia explícita y segura</span>
     </article>
   `;
 }
@@ -524,12 +526,15 @@ function renderSection(section) {
         <span class="sec-caret" aria-hidden="true"></span>
         <span class="sec-title">${escapeHtml(section.title)}</span>
         <span class="sec-badges">${badges.join("")}</span>
-        <button class="done-toggle ${isDone ? "on" : ""}" type="button" data-done="${section.id}"
-                title="${isDone ? "Estudiada — clic para desmarcar" : "Marcar como estudiada"}">${ICONS.check}</button>
       </summary>
       <div class="section-body">
         ${section.kind === "lab" && section.timerMinutes ? renderTimer(section) : ""}
         ${section.blocks.map((block) => renderBlock(block)).join("")}
+        <div class="section-completion">
+          <button class="done-toggle ${isDone ? "on" : ""}" type="button" data-done="${section.id}"
+                  aria-label="${isDone ? "Estudiada — clic para desmarcar" : "Marcar como estudiada"}"
+                  aria-pressed="${isDone}" title="${isDone ? "Estudiada — clic para desmarcar" : "Marcar como estudiada"}">${ICONS.check}</button>
+        </div>
       </div>
     </details>
   `;
@@ -539,16 +544,22 @@ function renderSection(section) {
 
 function renderBlock(block) {
   switch (block.type) {
-    case "code":
+    case "code": {
+      const copyLabel = block.role === "config" ? "Copiar configuración" : "Copiar comando";
+      const isCopyable = typeof block.copyText === "string";
       return `
-        <div class="code-panel">
+        <div class="code-panel role-${escapeHtml(block.role || "legacy")}">
           <div class="code-toolbar">
-            <span class="code-lang">${codeLabel(block.text)}</span>
-            <button class="copy-button" type="button" data-copy>Copiar</button>
+            <span class="code-lang">${escapeHtml(codeBlockLabel(block))}</span>
+            ${isCopyable
+              ? `<button class="copy-button" type="button" data-copy data-copy-label="${copyLabel}">${copyLabel}</button>`
+              : ""}
           </div>
+          ${isCopyable ? `<span hidden data-copy-source>${escapeHtml(block.copyText)}</span>` : ""}
           <pre><code>${highlightCode(block.text)}</code></pre>
         </div>
       `;
+    }
     case "ascii":
       return `<pre class="ascii-art">${escapeHtml(block.text)}</pre>`;
     case "note":
@@ -588,6 +599,23 @@ function renderBlock(block) {
       `;
     default:
       return `<div class="text-block">${renderRichText(block.text)}</div>`;
+  }
+}
+
+function codeBlockLabel(block) {
+  switch (block.role) {
+    case "exec":
+      return "Terminal";
+    case "output":
+      return "Salida esperada";
+    case "template":
+      return block.language === "gotemplate" ? "Plantilla Helm" : `Plantilla · ${block.language}`;
+    case "config":
+      return `Configuración · ${block.language}`;
+    case "reference":
+      return "Referencia";
+    default:
+      return codeLabel(block.text);
   }
 }
 
@@ -757,7 +785,7 @@ function makeSnippet(text, index, query) {
 /* -------------------------------------------------- resaltado de sintaxis */
 
 const CMD_WORDS = new Set((
-  "kubectl k kubeadm etcdctl crictl systemctl journalctl sudo cat vim nano curl wget ssh scp watch " +
+  "kubectl k kubeadm etcdctl etcdutl crictl systemctl journalctl sudo cat vim nano curl wget ssh scp watch " +
   "grep egrep awk sed echo export alias source mkdir cp mv rm ls apt apt-get openssl swapoff modprobe sysctl " +
   "complete python3 tar chmod chown head tail wc tee sort uniq find xargs cd docker ctr helm jq base64 touch " +
   "ln df du free ps top less man which sleep kill test set"

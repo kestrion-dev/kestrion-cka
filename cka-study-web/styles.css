@@ -850,6 +850,12 @@ h1, h2, h3, p {
   padding: 0.15rem 1.05rem 1.1rem;
 }
 
+.section-completion {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.2rem;
+}
+
 /* ----------------------------------------------------------------- texto */
 
 .text-block {
@@ -944,6 +950,16 @@ h1, h2, h3, p {
   background: var(--code-bg);
   border: 1px solid var(--code-line);
   overflow: hidden;
+}
+
+.code-panel.role-output,
+.code-panel.role-reference,
+.code-panel.role-template {
+  border-left: 3px solid var(--code-muted);
+}
+
+.code-panel.role-config {
+  border-left: 3px solid var(--accent);
 }
 
 .code-toolbar {

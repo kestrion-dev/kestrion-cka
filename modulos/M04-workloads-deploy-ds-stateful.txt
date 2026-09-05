@@ -1,0 +1,1008 @@
+==================================================
+M04 - WORKLOADS: DEPLOYMENTS, DAEMONSETS, STATEFULSETS
+==================================================
+
+MODULO: M04
+TIPO: Tecnico - workloads y controllers
+PRERREQUISITOS: M01 (arquitectura, controller-manager, reconciliation loop), M02 (kubectl apply, static pods vs pods gestionados), M03 (RBAC aplicado a ServiceAccounts de controllers)
+ENTORNO: Cluster kubeadm de 3 nodos - cka-cp1 (control-plane, 172.16.46.130), cka-worker1 (worker, 172.16.46.128), cka-worker2 (worker, 172.16.46.129) - Kubernetes v1.35.5
+PESO EN EXAMEN: 15% - Workloads & Scheduling
+TIEMPO ESTIMADO: 6-7 horas de practica
+
+--------------------------------------------------
+1. RESUMEN TECNICO
+--------------------------------------------------
+
+Este modulo cubre los tres controllers de mas alto nivel para gestionar pods en produccion: Deployment (aplicaciones stateless con actualizaciones continuas), DaemonSet (un pod por nodo, para agentes de infraestructura) y StatefulSet (aplicaciones con estado que requieren identidad de red y storage estables). Deployment gestiona una capa intermedia, el ReplicaSet, que a su vez gestiona los Pods; DaemonSet y StatefulSet gestionan sus Pods directamente, sin ese objeto intermedio.
+
+--------------------------------------------------
+2. PESO EN EL EXAMEN Y PREGUNTAS TIPICAS
+--------------------------------------------------
+
+15% del examen, dominio Workloads & Scheduling. Preguntas tipicas:
+
+- "Crea un Deployment con estrategia RollingUpdate, maxSurge=1, maxUnavailable=0"
+- "Realiza un rollback del Deployment X a la revision anterior"
+- "El Deployment X esta en un rollout colgado, diagnostica y corrige"
+- "Crea un DaemonSet que corra en todos los nodos excepto el control plane"
+- "Crea un StatefulSet con 3 replicas y verifica que cada pod mantiene su identidad tras un reinicio"
+
+--------------------------------------------------
+3. PRERREQUISITOS
+--------------------------------------------------
+
+De M01 usaras: el reconciliation loop del controller-manager (observar, comparar, actuar), aplicado ahora a ReplicaSets y a los controllers de DaemonSet y StatefulSet.
+De M02 usaras: la diferencia entre static pods (gestionados por kubelet directamente) y pods gestionados por un controller via la API.
+De M03 usaras: los ServiceAccounts, ya que los controllers internos de Kubernetes (kube-controller-manager) usan RBAC para operar sobre estos recursos.
+
+--------------------------------------------------
+4. OBJETIVOS DE APRENDIZAJE MEDIBLES
+--------------------------------------------------
+
+Al terminar este modulo seras capaz de:
+
+1. Explicar la cadena Deployment -> ReplicaSet -> Pod y por que existe esa capa intermedia
+2. Configurar una estrategia RollingUpdate con maxSurge y maxUnavailable segun un requisito dado
+3. Ejecutar y revertir un rollout, entendiendo que un rollback es en si mismo un nuevo rollout
+4. Explicar que cambio en el scheduling de DaemonSet introdujo Kubernetes v1.12 y por que el scheduler por defecto sigue interviniendo
+5. Explicar por que un StatefulSet requiere un Headless Service y que problema resuelve
+6. Diagnosticar un rollout estancado usando kubectl rollout status, describe y logs, entendiendo el rol de progressDeadlineSeconds
+
+--------------------------------------------------
+5. EXPLICACION TEORICA PROGRESIVA
+--------------------------------------------------
+
+5.1 POR QUE EXISTE EL REPLICASET (Y NO SE USA SOLO)
+------------------------------------------------------
+
+Conexion con M01: el reconciliation loop necesita un objeto que defina "cuantas replicas de este pod deben existir". Ese objeto es el ReplicaSet:
+
+- Usa un label selector para identificar QUE pods le pertenecen
+- Compara el numero de pods que matchean ese selector contra spec.replicas
+- Si faltan, crea pods desde el template
+- Si sobran, elimina pods segun un algoritmo de varios criterios (no simplemente "los mas nuevos primero")
+
+EL ALGORITMO REAL DE ELIMINACION AL ESCALAR HACIA ABAJO, en orden de prioridad:
+
+1. Pods no programados (unschedulable) o aun Pending se eliminan primero
+2. Pods NO Ready se eliminan antes que los Ready
+3. Si existe la anotacion controller.kubernetes.io/pod-deletion-cost, el pod con el valor mas bajo se elimina primero (por defecto todos valen 0)
+4. Pods en nodos con MAS replicas del mismo ReplicaSet se prefieren sobre pods en nodos con menos
+5. Entre pods Ready, se elimina primero el que lleva MENOS tiempo en estado Ready
+6. Pods con mas reinicios se eliminan primero
+7. Solo como criterio final, el pod creado MAS RECIENTEMENTE se elimina primero
+8. Si todo lo anterior empata, se usa un orden pseudoaleatorio por UUID
+
+POR QUE NO SE USA REPLICASET DIRECTAMENTE: un ReplicaSet NO sabe hacer rolling updates. Si cambias la imagen de un ReplicaSet, no reemplaza los pods automaticamente de forma gradual; hay que gestionarlo manualmente. Por eso Deployment existe como una capa encima:
+
+```text reference
+Deployment -> gestiona -> ReplicaSet -> gestiona -> Pod
+```
+
+Cuando cambias la imagen de un Deployment, este NO modifica el ReplicaSet existente: crea un ReplicaSet NUEVO con el template actualizado, y orquesta la transicion gradual entre el ReplicaSet viejo (escalando a 0) y el nuevo (escalando hasta el total). El ReplicaSet viejo NO se borra de inmediato: se conserva escalado a 0 replicas como historial de revision, hasta el limite marcado por spec.revisionHistoryLimit (10 por defecto). Superado ese limite, los ReplicaSets mas antiguos se eliminan de forma definitiva y dejan de estar disponibles para rollback.
+
+Verlo directamente:
+
+```bash exec
+kubectl create deployment demo --image=nginx:1.25 --replicas=3
+kubectl get replicaset
+kubectl get pods -l app=demo
+```
+
+```text output
+deployment.apps/demo created
+
+NAME               DESIRED   CURRENT   READY   AGE
+demo-6d9f8b7c9d     3         3         3       5s
+
+NAME                     READY   STATUS    RESTARTS   AGE
+demo-6d9f8b7c9d-4kxlq    1/1     Running   0          5s
+demo-6d9f8b7c9d-9p2wr    1/1     Running   0          5s
+demo-6d9f8b7c9d-hj7zt    1/1     Running   0          5s
+```
+
+5.2 ANATOMIA DE UN ROLLING UPDATE
+------------------------------------
+
+Cuando actualizas la imagen de un Deployment, el controller de Deployment ejecuta esta secuencia:
+
+1. Crea un ReplicaSet nuevo con el template actualizado, inicialmente con 0 replicas
+2. Escala el ReplicaSet nuevo hacia arriba y el viejo hacia abajo de forma incremental, respetando dos limites configurables:
+
+El valor maxSurge indica cuantos pods EXTRA por encima de spec.replicas se permiten durante la actualizacion. Ejemplo: replicas=4, maxSurge=1 -> puede haber hasta 5 pods simultaneos durante el rollout.
+
+El valor maxUnavailable indica cuantos pods pueden estar NO disponibles (por debajo de spec.replicas) durante la actualizacion. Ejemplo: replicas=4, maxUnavailable=1 -> nunca menos de 3 pods disponibles.
+
+3. Cada pod nuevo debe pasar su readiness probe antes de contar como "disponible". Si un pod nuevo nunca pasa su readiness probe, el rollout deja de progresar (ver 5.5 mas abajo sobre progressDeadlineSeconds).
+
+4. Cuando el ReplicaSet nuevo alcanza spec.replicas y el viejo llega a 0, el rollout termina.
+
+CONFIGURACION POR DEFECTO: maxSurge 25%, maxUnavailable 25% (redondeado segun el numero de replicas).
+
+LA OTRA ESTRATEGIA, Recreate: elimina TODOS los pods viejos antes de crear los nuevos. Provoca downtime pero es necesaria cuando la aplicacion no tolera dos versiones corriendo simultaneamente (ejemplo: migraciones de esquema de base de datos incompatibles).
+
+EL ROLLBACK NO ES INSTANTANEO: kubectl rollout undo no es un interruptor que revierte el estado al instante. Internamente dispara un NUEVO rollout: escala hacia arriba el ReplicaSet de la revision destino y escala hacia abajo el ReplicaSet actual, respetando la misma estrategia RollingUpdate (maxSurge/maxUnavailable) que cualquier otra actualizacion. En la practica suele completarse en segundos porque el ReplicaSet destino ya tiene su imagen descargada y probada, pero el mecanismo es el mismo rolling update, no un cambio de estado atomico.
+
+5.3 DAEMONSET - UN POD POR NODO
+-----------------------------------
+
+Conexion con M02 y M03b: ya usaste DaemonSets sin llamarlos formalmente: kube-proxy y calico-node son DaemonSets. Ahora se formaliza el concepto.
+
+QUE RESUELVE: garantizar que exactamente UN pod de cierto tipo corra en cada nodo (o en un subconjunto de nodos filtrado por nodeSelector), sin importar cuantos nodos se agreguen o quiten del cluster despues.
+
+COMO FUNCIONA INTERNAMENTE (desde Kubernetes v1.12): el DaemonSet controller NO asigna el pod a un nodo saltandose el scheduler. Lo que hace es crear, para cada nodo elegible, un Pod con un nodeAffinity que apunta especificamente a ese nodo. Es el SCHEDULER POR DEFECTO quien coloca (bind) ese pod en su nodo destino, exactamente igual que con cualquier otro pod, y por tanto SI evalua sus requests contra los recursos asignables del nodo: un pod de DaemonSet puede quedar Pending por falta de recursos, igual que cualquier otro pod.
+
+La diferencia real frente a un ReplicaSet no es "evitar el scheduler", sino que el DaemonSet controller decide DE ANTEMANO en que nodo debe ir cada replica (uno por cada nodo elegible), mientras que un ReplicaSet deja que el scheduler elija libremente entre TODOS los nodos disponibles. En la practica, los DaemonSets de infraestructura critica (como kube-proxy) suelen llevar una PriorityClass alta para minimizar el riesgo de quedar Pending bajo presion de recursos; PriorityClasses se cubren en profundidad en M06.
+
+Nota historica: antes de v1.12, el DaemonSet controller asignaba el pod directamente via spec.nodeName, sin pasar por el scheduler en absoluto. Ese comportamiento quedo obsoleto y no aplica a tu cluster (v1.35.5).
+
+TOLERATIONS AUTOMATICAS: por defecto, un DaemonSet NO corre en el control plane porque este tiene el taint node-role.kubernetes.io/control-plane:NoSchedule (se profundiza en M06). Para que un DaemonSet corra tambien ahi (como calico-node, que SI necesita correr en el control plane para dar red a sus pods), su spec incluye una toleration explicita para ese taint.
+
+ACTUALIZACIONES DE DAEMONSET: updateStrategy es RollingUpdate (por defecto) u OnDelete. Con RollingUpdate, maxUnavailable controla cuantos nodos pueden estar sin el pod del DaemonSet simultaneamente durante una actualizacion.
+
+5.4 STATEFULSET - IDENTIDAD Y STORAGE ESTABLES
+--------------------------------------------------
+
+EL PROBLEMA QUE RESUELVE: un Deployment trata todos sus pods como intercambiables: mismo nombre generado aleatoriamente, sin orden de creacion garantizado, sin storage individual persistente. Esto es perfecto para apps stateless (un frontend web), pero roto para apps con estado: una base de datos en cluster necesita que cada nodo tenga SIEMPRE la misma identidad de red y SIEMPRE el mismo volumen de datos, incluso tras reiniciarse.
+
+LAS TRES GARANTIAS DE UN STATEFULSET:
+
+1. Nombre ordinal estable: los pods se llaman nombre-0, nombre-1, nombre-2... nunca con sufijo aleatorio. Si el pod web-1 muere, su reemplazo se vuelve a llamar web-1, no un nombre nuevo.
+
+2. Orden de creacion y eliminacion: con la politica por defecto OrderedReady, se crean en orden estricto: 0, luego 1, luego 2. El pod N+1 NO se crea hasta que el pod N este Running y Ready. Esto es una condicion bloqueante, no solo secuencial: si pod-0 nunca llega a Ready, pod-1 NUNCA se crea, no aparece en el cluster de ninguna forma (ni Pending ni en ningun otro estado). Se eliminan en orden inverso: 2, luego 1, luego 0.
+
+3. Storage individual y persistente: cada pod obtiene su PROPIO PersistentVolumeClaim, generado desde un volumeClaimTemplate. Si el pod web-1 se elimina y se recrea, se REconecta al MISMO PVC (mismos datos), no a uno nuevo. Profundidad completa de PVC en M11; aqui se usa el concepto para entender StatefulSet.
+
+POR QUE REQUIERE UN HEADLESS SERVICE: un Service normal balancea trafico entre pods de forma intercambiable, y les da una sola IP virtual compartida (ClusterIP). Para un StatefulSet, cada pod necesita su PROPIO nombre DNS individual y resoluble, no un balanceo hacia "cualquiera de ellos".
+
+Un Headless Service (clusterIP: None) no crea una IP virtual: en su lugar, CoreDNS (M10 en detalle) devuelve directamente las IPs de los pods individuales cuando consultas pod.service.namespace.svc.cluster.local
+
+```text reference
+web-0.web-headless.default.svc.cluster.local
+web-1.web-headless.default.svc.cluster.local
+```
+
+Esto permite que un pod de la aplicacion (o un cliente de base de datos) se conecte especificamente al "nodo 0" del cluster de datos, algo imposible con un Service normal.
+
+5.5 PROGRESSDEADLINESECONDS - CUANDO UN ROLLOUT SE MARCA ESTANCADO
+-----------------------------------------------------------------------
+
+El Deployment controller sigue intentando progresar un rollout indefinidamente en segundo plano, pero expone una senal de alerta: spec.progressDeadlineSeconds (600 segundos por defecto). Si en ese tiempo no hay progreso (ningun pod nuevo pasa a Ready, ningun pod viejo se termina, ningun ReplicaSet nuevo escala), el Deployment marca su condicion Progressing en False con razon ProgressDeadlineExceeded. Esta condicion es lo que kubectl rollout status detecta para reportar el fallo; el controller NO hace rollback automatico, simplemente deja de considerar el rollout como "en progreso saludable" y sigue reintentando.
+
+--------------------------------------------------
+6. DIAGRAMA ASCII - ROLLING UPDATE PASO A PASO
+--------------------------------------------------
+
+```text reference
+Estado inicial: Deployment "web", replicas=4,
+maxSurge=1, maxUnavailable=0
+ReplicaSet-v1 (imagen nginx:1.25): 4/4 pods Running
+
+Usuario ejecuta:
+kubectl set image deployment/web nginx=nginx:1.26
+
+PASO 1 - se crea ReplicaSet-v2, aun en 0:
+  ReplicaSet-v1: [P][P][P][P]  (4 pods, imagen 1.25)
+  ReplicaSet-v2: []            (0 pods, imagen 1.26)
+
+PASO 2 - maxSurge=1 permite 1 pod extra (total 5):
+  ReplicaSet-v1: [P][P][P][P]  (4, sigue igual)
+  ReplicaSet-v2: [P*]          (1 pod nuevo, arrancando)
+  * el pod nuevo debe pasar su readiness probe
+    antes de contar como disponible
+
+PASO 3 - pod nuevo Ready; maxUnavailable=0 obliga
+a mantener 4 disponibles SIEMPRE, asi que ahora
+puede bajar 1 del viejo:
+  ReplicaSet-v1: [P][P][P]     (baja a 3)
+  ReplicaSet-v2: [P][P*]       (sube a 2, uno arrancando)
+
+PASO 4, 5... se repite el patron hasta:
+  ReplicaSet-v1: []            (0 pods)
+  ReplicaSet-v2: [P][P][P][P]  (4 pods, imagen 1.26)
+
+ReplicaSet-v1 se CONSERVA (revision anterior, escalado
+a 0) hasta el limite de spec.revisionHistoryLimit,
+permitiendo rollback mientras no se supere ese limite.
+```
+
+--------------------------------------------------
+7. EJEMPLOS PRACTICOS DESPLEGABLES
+--------------------------------------------------
+
+7.1 DEPLOYMENT CON ROLLINGUPDATE CONFIGURADO
+------------------------------------------------
+
+```bash exec
+kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    app: web
+spec:
+  replicas: 4
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: web
+        image: nginx:1.25
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 2
+          periodSeconds: 3
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+EOF
+```
+
+Verificar el rollout inicial:
+
+```bash exec
+kubectl rollout status deployment/web
+kubectl get replicaset -l app=web
+```
+
+Ejecutar la actualizacion:
+
+```bash exec
+kubectl set image deployment/web nginx=nginx:1.26
+kubectl rollout status deployment/web
+```
+
+```text output
+Waiting for deployment "web" rollout to finish: 1 out of 4 new replicas have been updated...
+Waiting for deployment "web" rollout to finish: 2 out of 4 new replicas have been updated...
+deployment "web" successfully rolled out
+```
+
+Observar el proceso en vivo en otra terminal mientras corre:
+
+```bash exec
+watch kubectl get pods -l app=web
+```
+
+Nunca mas de 5 pods activos (maxSurge=1) ni menos de 4 disponibles (maxUnavailable=0). Ctrl+C para salir.
+
+Verificar el historial de revisiones:
+
+```bash exec
+kubectl rollout history deployment/web
+```
+
+```text output
+deployment.apps/web
+REVISION  CHANGE-CAUSE
+1         <none>
+2         <none>
+```
+
+Ver el detalle de una revision especifica:
+
+```bash exec
+kubectl rollout history deployment/web --revision=1
+```
+
+Pausar un rollout a mitad de camino (util cuando detectas un problema durante el despliegue):
+
+```bash exec
+kubectl set image deployment/web nginx=nginx:1.27
+kubectl rollout pause deployment/web
+```
+
+Continuar desde donde quedo:
+
+```bash exec
+kubectl rollout resume deployment/web
+```
+
+Revertir a la revision anterior (recordar: esto dispara un nuevo rollout, no un cambio instantaneo):
+
+```bash exec
+kubectl rollout undo deployment/web
+```
+
+Revertir a una revision especifica:
+
+```bash exec
+kubectl rollout undo deployment/web --to-revision=1
+```
+
+7.2 DAEMONSET - AGENTE EN TODOS LOS NODOS
+-----------------------------------------------
+
+```bash exec
+kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-monitor
+  labels:
+    app: node-monitor
+spec:
+  selector:
+    matchLabels:
+      app: node-monitor
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: node-monitor
+    spec:
+      containers:
+      - name: monitor
+        image: busybox
+        command: ["sh", "-c", "while true; do sleep 3600; done"]
+        resources:
+          requests:
+            cpu: 50m
+            memory: 32Mi
+EOF
+```
+
+Verificar que corre exactamente en los WORKERS (2 pods, no en el control plane, por defecto):
+
+```bash exec
+kubectl get pods -l app=node-monitor -o wide
+kubectl get daemonset node-monitor
+```
+
+```text output
+NAME                 READY   STATUS    NODE
+node-monitor-4jkxc   1/1     Running   cka-worker1
+node-monitor-9plqz   1/1     Running   cka-worker2
+
+NAME           DESIRED   CURRENT   READY
+node-monitor   2         2         2
+```
+
+DESIRED=2 porque el DaemonSet solo cuenta los nodos SIN el taint de control-plane.
+
+Confirmar que el scheduler por defecto es quien coloca estos pods (no el DaemonSet controller):
+
+```bash exec
+kubectl get pod -l app=node-monitor -o jsonpath='{.items[0].spec.affinity.nodeAffinity}'
+kubectl describe pod -l app=node-monitor | grep -A2 "Events:"
+```
+
+```text output
+{"requiredDuringSchedulingIgnoredDuringExecution":{"nodeSelectorTerms":[{"matchFields":[{"key":"metadata.name","operator":"In","values":["cka-worker1"]}]}]}}
+
+Events:
+  Normal  Scheduled  <invalid>  default-scheduler  Successfully assigned default/node-monitor-4jkxc to cka-worker1
+```
+
+El campo nodeAffinity confirma el mecanismo de 5.3, y el evento Scheduled confirma que fue default-scheduler quien hizo el bind, no el DaemonSet controller.
+
+Hacer que tambien corra en el control plane, agregando la toleration correspondiente:
+
+```bash exec
+kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-monitor
+  labels:
+    app: node-monitor
+spec:
+  selector:
+    matchLabels:
+      app: node-monitor
+  template:
+    metadata:
+      labels:
+        app: node-monitor
+    spec:
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        effect: NoSchedule
+      containers:
+      - name: monitor
+        image: busybox
+        command: ["sh", "-c", "while true; do sleep 3600; done"]
+EOF
+```
+
+```bash exec
+kubectl get pods -l app=node-monitor -o wide
+```
+
+```text output
+NAME                 READY   STATUS    NODE
+node-monitor-4jkxc   1/1     Running   cka-worker1
+node-monitor-9plqz   1/1     Running   cka-worker2
+node-monitor-7xzqm   1/1     Running   cka-cp1
+```
+
+DESIRED cambia a 3.
+
+7.3 STATEFULSET CON HEADLESS SERVICE
+------------------------------------------
+
+Headless Service primero (requisito del StatefulSet):
+
+```bash exec
+kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-headless
+spec:
+  clusterIP: None
+  selector:
+    app: web-stateful
+  ports:
+  - port: 80
+    name: http
+EOF
+```
+
+Verificar que NO tiene IP asignada:
+
+```bash exec
+kubectl get svc web-headless
+```
+
+```text output
+NAME           TYPE        CLUSTER-IP   PORT(S)
+web-headless   ClusterIP   None         80/TCP
+```
+
+StatefulSet (sin PVC real para simplificar; la version completa con volumeClaimTemplate y almacenamiento persistente se practica en M11):
+
+```bash exec
+kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: web-stateful
+spec:
+  serviceName: web-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web-stateful
+  template:
+    metadata:
+      labels:
+        app: web-stateful
+    spec:
+      containers:
+      - name: web
+        image: nginx:1.25
+        ports:
+        - containerPort: 80
+EOF
+```
+
+Observar el ORDEN de creacion (ejecutar rapido tras el apply, en otra terminal):
+
+```bash exec
+watch kubectl get pods -l app=web-stateful -o wide
+```
+
+Apareceran en orden estricto: web-stateful-0 (Running primero), web-stateful-1 (arranca solo cuando 0 esta Ready), web-stateful-2 (arranca solo cuando 1 esta Ready). Ctrl+C para salir.
+
+Verificar la identidad de red individual (requiere un pod cliente con herramientas de red):
+
+```bash exec
+kubectl run dns-test --image=busybox --restart=Never -- sleep 3600
+kubectl exec dns-test -- nslookup web-stateful-0.web-headless.default.svc.cluster.local
+kubectl exec dns-test -- nslookup web-stateful-1.web-headless.default.svc.cluster.local
+```
+
+```text output
+Server:    10.96.0.10
+Address:   10.96.0.10:53
+
+Name:   web-stateful-0.web-headless.default.svc.cluster.local
+Address: 192.168.135.5
+
+Name:   web-stateful-1.web-headless.default.svc.cluster.local
+Address: 192.168.198.11
+```
+
+Demostrar la identidad ESTABLE tras eliminar un pod:
+
+```bash exec
+kubectl get pod web-stateful-1 -o jsonpath='{.status.podIP}'
+```
+
+Anotar esta IP.
+
+```bash exec
+kubectl delete pod web-stateful-1
+watch kubectl get pods -l app=web-stateful
+```
+
+El reemplazo se llama OTRA VEZ web-stateful-1 (no un nombre nuevo aleatorio como haria un ReplicaSet). Ctrl+C cuando este Running.
+
+```bash exec
+kubectl get pod web-stateful-1 -o jsonpath='{.status.podIP}'
+```
+
+Esta IP sera DIFERENTE (la IP de pod SI cambia, pero el NOMBRE DNS web-stateful-1.web-headless... sigue resolviendo correctamente al pod nuevo).
+
+--------------------------------------------------
+8. LABORATORIO GUIADO
+--------------------------------------------------
+
+OBJETIVO: simular un incidente de rollout fallido y resolverlo, el escenario mas realista de examen para esta seccion.
+
+Paso 1 - desplegar una version funcional:
+
+```bash exec
+kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-critica
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: app-critica
+  template:
+    metadata:
+      labels:
+        app: app-critica
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.25
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          periodSeconds: 3
+EOF
+```
+
+```bash exec
+kubectl rollout status deployment/app-critica
+```
+
+Paso 2 - simular un despliegue roto (imagen con un puerto de readiness probe incorrecto, causa comun de rollouts estancados):
+
+```bash exec
+kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-critica
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: app-critica
+  template:
+    metadata:
+      labels:
+        app: app-critica
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.26
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9999
+          periodSeconds: 3
+EOF
+```
+
+Paso 3 - detectar el problema:
+
+```bash exec
+kubectl rollout status deployment/app-critica
+```
+
+```text output
+Waiting for deployment spec update to be observed...
+Waiting for deployment "app-critica" rollout to finish: 1 out of 3 new replicas have been updated...
+```
+
+El comando no llega nunca a "successfully rolled out". Ctrl+C para salir del status (no cancela el rollout, solo el comando que esperaba).
+
+```bash exec
+kubectl get pods -l app=app-critica
+```
+
+```text output
+NAME                            READY   STATUS    RESTARTS
+app-critica-7d9f8c-4kxlq        1/1     Running   0
+app-critica-7d9f8c-9p2wr        1/1     Running   0
+app-critica-6b8a4d-hj7zt        0/1     Running   0
+```
+
+El pod nuevo app-critica-6b8a4d-hj7zt esta en 0/1 READY y no avanza.
+
+```bash exec
+kubectl describe pod app-critica-6b8a4d-hj7zt
+```
+
+```text output
+Events:
+  Warning  Unhealthy  Readiness probe failed: dial tcp 192.168.135.9:9999: connect: connection refused
+```
+
+Paso 4 - corregir el problema (dos opciones validas en el examen segun lo que pida la pregunta):
+
+Opcion A - corregir hacia adelante:
+
+```bash exec
+kubectl patch deployment app-critica --type=json -p='[{"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe/httpGet/port","value":80}]'
+```
+
+Opcion B - revertir, recordando que esto dispara un nuevo rollout, no un cambio instantaneo (mas rapido bajo presion de tiempo en el examen real):
+
+```bash exec
+kubectl rollout undo deployment/app-critica
+```
+
+Paso 5 - verificar la recuperacion:
+
+```bash exec
+kubectl rollout status deployment/app-critica
+kubectl get pods -l app=app-critica
+```
+
+```text output
+deployment "app-critica" successfully rolled out
+
+NAME                            READY   STATUS    RESTARTS
+app-critica-7d9f8c-4kxlq        1/1     Running   0
+app-critica-7d9f8c-9p2wr        1/1     Running   0
+app-critica-7d9f8c-k2zxq        1/1     Running   0
+```
+
+--------------------------------------------------
+9. CHECKPOINT
+--------------------------------------------------
+
+Pregunta 1:
+Por que un Deployment no modifica el ReplicaSet existente cuando cambias la imagen, sino que crea uno nuevo?
+
+Respuesta:
+Porque el ReplicaSet viejo se conserva (escalado a 0) como historial de revision hasta el limite de spec.revisionHistoryLimit, lo que permite el rollback via kubectl rollout undo. Si se modificara el mismo ReplicaSet, se perderia la version anterior.
+
+Pregunta 2:
+Con replicas=6, maxSurge=2, maxUnavailable=0, cual es el numero maximo de pods corriendo simultaneamente durante un rollout, y el minimo de pods disponibles?
+
+Respuesta:
+Maximo 8 pods (6 + maxSurge de 2). Minimo disponible: 6 (maxUnavailable=0 no permite bajar del total deseado).
+
+Pregunta 3:
+Que cambio introdujo Kubernetes v1.12 en la forma en que se programan los pods de un DaemonSet, y que sigue siendo responsabilidad del scheduler por defecto?
+
+Respuesta:
+Desde v1.12, el DaemonSet controller ya no asigna el pod directamente a un nodo via spec.nodeName. En su lugar, crea el pod con un nodeAffinity apuntando al nodo elegible. El scheduler por defecto sigue siendo quien coloca (bind) fisicamente el pod en ese nodo, y por tanto sigue evaluando sus requests contra los recursos asignables del nodo, igual que con cualquier otro pod.
+
+Pregunta 4:
+Que problema resuelve especificamente un Headless Service que un Service normal no resuelve?
+
+Respuesta:
+Un Service normal da una unica IP virtual que balancea hacia cualquier pod del selector. Un Headless Service permite resolver el nombre DNS de CADA pod individualmente (pod.service.namespace.svc.cluster.local), necesario para que un StatefulSet tenga identidad de red estable e individual.
+
+Pregunta 5:
+Un StatefulSet con 3 replicas y politica OrderedReady: pod-0 nunca llega a estado Ready. Que le sucede a pod-1?
+
+Respuesta:
+Pod-1 NUNCA se crea. El StatefulSet controller no crea el siguiente pod de la secuencia hasta que el anterior este Running y Ready. Si pod-0 se queda bloqueado, pod-1 simplemente no llega a existir en el cluster, no aparece ni como Pending. Hay que corregir o eliminar pod-0 para que el controller continue con pod-1.
+
+--------------------------------------------------
+10. LABORATORIO CRONOMETRADO
+--------------------------------------------------
+
+OBJETIVO: completar en menos de 15 minutos.
+
+TAREA:
+
+1. Crea un Deployment 'api-gateway' con imagen nginx:1.25, 5 replicas, estrategia RollingUpdate con maxSurge=2 y maxUnavailable=1
+2. Realiza un upgrade de la imagen a nginx:1.26
+3. Verifica el historial y guarda el numero total de revisiones en /tmp/revisiones.txt
+4. Crea un DaemonSet 'log-agent' con imagen busybox (comando: sleep 3600) que corra unicamente en los nodos worker (sin tolerar el taint del control plane)
+5. Crea un Headless Service 'db-headless' y un StatefulSet 'db' con 3 replicas, imagen nginx:1.25
+6. Guarda el nombre del pod StatefulSet con indice 0 en /tmp/pod-cero.txt usando jsonpath
+
+CRITERIOS DE EXITO:
+
+```bash exec
+kubectl get deployment api-gateway
+cat /tmp/revisiones.txt
+kubectl get daemonset log-agent
+kubectl get statefulset db
+cat /tmp/pod-cero.txt
+```
+
+```text output
+NAME          READY   UP-TO-DATE   AVAILABLE
+api-gateway   5/5     5            5
+
+2
+
+NAME        DESIRED   CURRENT   READY
+log-agent   2         2         2
+
+NAME   READY   AGE
+db     3/3     1m
+
+db-0
+```
+
+SOLUCION DE REFERENCIA (no mirar hasta terminar):
+
+```bash exec
+kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+spec:
+  replicas: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.25
+EOF
+
+kubectl set image deployment/api-gateway nginx=nginx:1.26
+kubectl rollout status deployment/api-gateway
+
+kubectl rollout history deployment/api-gateway --no-headers 2>/dev/null | wc -l > /tmp/revisiones.txt
+```
+
+```bash exec
+kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: log-agent
+spec:
+  selector:
+    matchLabels:
+      app: log-agent
+  template:
+    metadata:
+      labels:
+        app: log-agent
+    spec:
+      containers:
+      - name: agent
+        image: busybox
+        command: ["sleep", "3600"]
+EOF
+```
+
+```bash exec
+kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-headless
+spec:
+  clusterIP: None
+  selector:
+    app: db
+  ports:
+  - port: 80
+EOF
+
+kubectl apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db
+spec:
+  serviceName: db-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app: db
+  template:
+    metadata:
+      labels:
+        app: db
+    spec:
+      containers:
+      - name: db
+        image: nginx:1.25
+EOF
+
+kubectl get pods -l app=db -o jsonpath='{.items[0].metadata.name}' > /tmp/pod-cero.txt
+```
+
+--------------------------------------------------
+11. TROUBLESHOOTING - CASOS REALES
+--------------------------------------------------
+
+CASO 1: rollout estancado, no llega a "successfully rolled out"
+--------------------------------------------------------------------
+
+Sintoma:
+El comando kubectl rollout status deployment/app no termina nunca, o kubectl get pods muestra pods nuevos en 0/1 Ready de forma persistente. Si ya paso el tiempo de progressDeadlineSeconds (600 segundos por defecto), el Deployment marca su condicion Progressing en False con razon ProgressDeadlineExceeded, aunque el controller sigue reintentando en el fondo sin hacer rollback automatico.
+
+Diagnostico paso a paso:
+
+```text reference
+kubectl get pods -l app=<label>
+```
+
+Identificar los pods del ReplicaSet mas nuevo (sustituye <label> por el selector real del Deployment).
+
+```text reference
+kubectl get deployment <nombre> -o jsonpath='{.status.conditions}'
+```
+
+Revisar si aparece type=Progressing, status=False, reason=ProgressDeadlineExceeded (sustituye <nombre> por el Deployment real).
+
+El siguiente comando se ejecuta contra el pod nuevo que identificaste arriba:
+
+```text reference
+kubectl describe pod <pod-nuevo>
+kubectl logs <pod-nuevo>
+```
+
+En describe, revisar Events al final: Readiness probe failed, Back-off restarting failed container, o ImagePullBackOff. En logs, descartar un crash de la aplicacion misma.
+
+Causas mas comunes: readinessProbe apunta a un puerto o path incorrecto; la nueva imagen no existe o tiene un typo (ImagePullBackOff); la nueva version de la app tarda mas en arrancar que initialDelaySeconds del probe.
+
+Solucion:
+Corregir el manifiesto y reaplicar, o revertir con kubectl rollout undo deployment seguido del nombre del Deployment. Recordar que el undo dispara un nuevo rollout, no un cambio instantaneo.
+
+CASO 2: DaemonSet no corre en el numero esperado de nodos
+-------------------------------------------------------------
+
+Sintoma:
+El comando kubectl get daemonset muestra un valor DESIRED menor al numero total de nodos del cluster.
+
+Diagnostico paso a paso:
+
+```bash exec
+kubectl get nodes
+kubectl get daemonset log-agent
+```
+
+Comparar DESIRED contra el total de nodos.
+
+```bash exec
+kubectl describe node cka-cp1 | grep Taints
+```
+
+```text output
+Taints:  node-role.kubernetes.io/control-plane:NoSchedule
+```
+
+El siguiente comando se ejecuta contra el DaemonSet en cuestion (sustituye el nombre por el real):
+
+```text reference
+kubectl get pods -l app=<selector-del-daemonset> -o wide
+kubectl get daemonset <nombre> -o jsonpath='{.spec.template.spec.tolerations}'
+```
+
+Confirmar que nodos SI tienen el pod y si el DaemonSet tiene la toleration correspondiente al taint detectado arriba.
+
+Si el DaemonSet, a pesar de tener la toleration correcta, aun asi no llega al DESIRED esperado, verificar tambien recursos disponibles en el nodo faltante (desde v1.12 el scheduler evalua requests, ver seccion 5.3):
+
+```bash exec
+kubectl describe node cka-cp1 | grep -A5 "Allocated resources"
+```
+
+Solucion:
+Si el DaemonSet DEBE correr tambien en nodos con taints (como kube-proxy o Calico), agregar la toleration correspondiente en el template del pod. Si el problema es falta de recursos asignables en ese nodo, reducir los requests del pod o liberar recursos. Si el DaemonSet NO debe correr en el control plane (comportamiento esperado como en el ejemplo 7.2 inicial), DESIRED menor al total de nodos es correcto, no es un fallo.
+
+CASO 3: pods de un StatefulSet no llegan al numero esperado
+------------------------------------------------------------
+
+Sintoma:
+El pod db-1 no aparece en absoluto en kubectl get pods, o aparece pero permanece en Pending mientras db-0 esta Running normalmente. Son dos causas distintas y hay que distinguirlas antes de diagnosticar.
+
+Diagnostico paso a paso:
+
+```bash exec
+kubectl get pod db-0
+kubectl get pods -l app=db
+```
+
+Caso A - db-1 no aparece en la lista en absoluto: significa que el StatefulSet controller aun no lo ha creado, porque con la politica por defecto OrderedReady, db-0 debe estar Running y Ready primero. Revisar db-0:
+
+```bash exec
+kubectl describe pod db-0
+```
+
+Si db-0 nunca llega a Ready, ese es el problema real; db-1 no se creara hasta resolverlo. No es un fallo de db-1 en si.
+
+Caso B - db-1 SI aparece en la lista, en estado Pending, y db-0 ESTA Ready: aqui si es un problema de scheduling normal, independiente del orden del StatefulSet.
+
+```bash exec
+kubectl describe pod db-1
+```
+
+```text output
+Events:
+  Warning  FailedScheduling  0/3 nodes are available: insufficient cpu
+```
+
+O bien, un mensaje relacionado con almacenamiento:
+
+```text output
+Events:
+  Warning  FailedScheduling  pod has unbound immediate PersistentVolumeClaims
+```
+
+Este ultimo se resuelve en profundidad en M11 (storage). Si el mensaje menciona PVC, el siguiente comando se ejecuta sustituyendo el label real:
+
+```text reference
+kubectl get pvc -l app=<label>
+```
+
+STATUS Pending en el PVC indica que no hay StorageClass o PV disponible (tema de M11).
+
+Solucion:
+Caso A: corregir por que db-0 no llega a Ready (revisar imagen, probes, recursos); db-1 se creara automaticamente despues. Caso B: si es recursos insuficientes, liberar recursos o reducir requests; si es PVC sin bind, revisar StorageClass (M11).
+
+--------------------------------------------------
+12. ENTORNO REQUERIDO
+--------------------------------------------------
+
+Entorno principal: cluster kubeadm de 3 nodos. Los ejemplos de DaemonSet de este modulo dependen directamente de tener multiples nodos reales (control plane + 2 workers) para observar el comportamiento de taints y tolerations con sentido.
+
+ALTERNATIVA K3S (plan B):
+
+Deployment y StatefulSet funcionan identico. DaemonSet en K3s single-node pierde valor didactico: con un unico nodo, DESIRED siempre sera 1, y no se puede observar la diferencia entre "corre en workers" vs "corre tambien en control plane", porque K3s por defecto NO aplica el taint de control-plane a su unico nodo (a menos que se instale explicitamente con --disable-agent en una topologia separada). Este es el motivo principal por el que este modulo requiere el cluster kubeadm de 3 nodos como entorno principal.
+
+LIMPIEZA DEL MODULO:
+
+```bash exec
+kubectl delete deployment web app-critica api-gateway
+kubectl delete daemonset node-monitor log-agent
+kubectl delete statefulset web-stateful db
+kubectl delete service web-headless db-headless
+kubectl delete pod dns-test
+```
+
+==================================================
+FIN M04 - WORKLOADS: DEPLOYMENTS, DAEMONSETS, STATEFULSETS
+SIGUIENTE: M05 - JOBS, CRONJOBS Y GESTION DE RECURSOS
+==================================================

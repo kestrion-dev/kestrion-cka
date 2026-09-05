@@ -6,6 +6,7 @@
  *   módulo  -> { id, code, title, meta[], sections[], raw }
  *   sección -> { id, title, level, kind, blocks[], timerMinutes?, raw }
  *   bloque  -> { type: text|note|task|success|code|ascii, text }
+ *              Los bloques code pueden incluir role, language y copyText.
  *            | { type: quiz, label, question, answerBlocks[] }
  *            | { type: spoiler, label, blocks[] }
  * No modifica nunca el fichero original: solo lo interpreta.
@@ -223,6 +224,48 @@ const CourseParser = (() => {
 
   function parseBlocks(lines) {
     const blocks = [];
+    let legacyLines = [];
+
+    const flushLegacy = () => {
+      if (legacyLines.length) blocks.push(...parseLegacyBlocks(legacyLines));
+      legacyLines = [];
+    };
+
+    for (let index = 0; index < lines.length; index += 1) {
+      const fence = parseFenceStart(lines[index]);
+      if (!fence) {
+        legacyLines.push(lines[index]);
+        continue;
+      }
+
+      const end = lines.findIndex((line, candidate) => candidate > index && /^\s*```\s*$/.test(line));
+      if (end === -1) {
+        // Un cercado incompleto se conserva como material legacy: nunca se
+        // pierde contenido por una errata en el TXT.
+        legacyLines.push(...lines.slice(index));
+        break;
+      }
+
+      flushLegacy();
+      const text = lines.slice(index + 1, end).join("\n");
+      blocks.push({
+        type: "code",
+        role: fence.role,
+        language: fence.language,
+        text,
+        copyText: fence.role === "exec" || fence.role === "config" ? text : null,
+      });
+      index = end;
+    }
+
+    flushLegacy();
+    return blocks;
+  }
+
+  // Los cercados tipados tienen prioridad. Fuera de ellos se mantiene el
+  // parser historico, pero sin declarar copiables los bloques ambiguos.
+  function parseLegacyBlocks(lines) {
+    const blocks = [];
     let buffer = [];
     let code = [];
     let inCode = false;
@@ -238,7 +281,7 @@ const CourseParser = (() => {
 
     const flushCode = () => {
       const text = trimEmpty(code).join("\n");
-      if (text.trim()) blocks.push({ type: "code", text });
+      if (text.trim()) blocks.push({ type: "code", text, role: "legacy", language: null, copyText: null });
       code = [];
     };
 
@@ -300,9 +343,14 @@ const CourseParser = (() => {
     return blocks;
   }
 
+  function parseFenceStart(line) {
+    const match = line.match(/^\s*```([A-Za-z0-9_+.-]+)\s+(exec|output|template|config|reference)\s*$/i);
+    return match ? { language: match[1].toLowerCase(), role: match[2].toLowerCase() } : null;
+  }
+
   function isCodeStart(line) {
     const value = line.trim();
-    if (/^(kubectl|k |cat |vim |source |alias |export |complete |sudo |systemctl|journalctl|crictl|etcdctl|kubeadm|curl |wget |apt |apt-get |modprobe |sysctl |mkdir |cp |mv |rm |grep |awk |openssl |watch |ssh |scp |containerd|swapoff|sed |echo )/.test(value)) {
+    if (/^(kubectl|k |cat |vim |source |alias |export |complete |sudo |systemctl|journalctl|crictl|etcdctl|etcdutl|kubeadm|curl |wget |apt |apt-get |modprobe |sysctl |mkdir |cp |mv |rm |grep |awk |openssl |watch |ssh |scp |containerd|swapoff|sed |echo )/.test(value)) {
       return !looksLikeProse(value);
     }
     if (isLabelLine(value)) return false;

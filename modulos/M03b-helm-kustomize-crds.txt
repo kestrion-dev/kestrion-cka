@@ -91,6 +91,7 @@ Al terminar este modulo seras capaz de:
 5.1 EL PROBLEMA QUE RESUELVE HELM
 ------------------------------------
 
+```text reference
 Conexion con M02 y M03: hasta ahora, cada recurso
 que creaste (Deployment, Role, RoleBinding, Service)
 lo aplicaste con manifiestos individuales via
@@ -98,6 +99,7 @@ kubectl apply -f. Para una aplicacion real con
 decenas de recursos relacionados (Deployment,
 Service, ConfigMap, Secret, RBAC, PVC), gestionar
 cada YAML por separado se vuelve inviable:
+```
 
   - No hay versionado del conjunto completo
   - No hay forma nativa de parametrizar valores
@@ -107,6 +109,7 @@ cada YAML por separado se vuelve inviable:
 
 Helm resuelve esto con tres conceptos:
 
+```text reference
   Chart:
     Un paquete de manifiestos YAML con plantillas
     (templates) que aceptan variables. Es analogo
@@ -122,7 +125,9 @@ Helm resuelve esto con tres conceptos:
     El fichero (o los flags) que parametrizan el
     Chart: imagen, tag, replicas, recursos, etc.
     Sin tocar los templates del Chart.
+```
 
+```text reference
   COMO FUNCIONA INTERNAMENTE:
     Helm renderiza los templates del Chart con los
     values proporcionados, produce YAML final, y lo
@@ -133,6 +138,7 @@ Helm resuelve esto con tres conceptos:
     Secret en el namespace del release. Por eso
     kubectl get secrets muestra objetos con nombres
     como sh.helm.release.v1.<nombre>.v1
+```
 
 5.2 EL PROBLEMA QUE RESUELVE KUSTOMIZE
 ------------------------------------------
@@ -148,6 +154,7 @@ parte de YAML plano valido (una "base") y aplica
 "patches" declarativos por encima (los "overlays"),
 sin tocar el YAML original.
 
+```text reference
   Base:
     El conjunto de manifiestos comun a todos los
     entornos.
@@ -156,7 +163,9 @@ sin tocar el YAML original.
     Una carpeta que referencia la base y aplica
     modificaciones: cambiar el numero de replicas,
     la imagen, agregar labels, etc.
+```
 
+```text reference
   COMO FUNCIONA INTERNAMENTE:
     kubectl tiene Kustomize integrado desde la
     version 1.14 (kubectl apply -k). No requiere
@@ -169,6 +178,7 @@ sin tocar el YAML original.
                se ejecuta como binario externo
     Kustomize -> kubectl SI lo entiende de forma
                nativa: kubectl apply -k <carpeta>
+```
 
 5.3 CUSTOM RESOURCE DEFINITIONS (CRDs)
 ------------------------------------------
@@ -207,6 +217,7 @@ para converger). Un Operator es exactamente ese
 mismo patron, pero para un CRD personalizado en
 lugar de un recurso nativo.
 
+```text reference
   DEFINICION:
     Operator = CRD (el "que") + Controller (el
     "quien actua"). El controller corre como un
@@ -222,6 +233,7 @@ lugar de un recurso nativo.
          nativos (Pods, Services, Secrets) para
          converger al estado deseado
       4. Vuelve al paso 1, indefinidamente
+```
 
   POR QUE EXISTEN:
     Encapsulan conocimiento operacional complejo.
@@ -248,11 +260,14 @@ proveedores implementan ese contrato de forma
 intercambiable. Kubernetes no sabe ni le importa
 cual implementacion corre debajo.
 
+```text reference
   CNI - Container Network Interface:
     Contrato para asignar red a los pods: IP,
-    rutas, reglas de firewall para NetworkPolicy.
+    interfaces, rutas y configuracion de red.
     Implementaciones: Calico (la tuya), Flannel,
     Cilium, Weave.
+    Algunas implementaciones, como Calico y Cilium,
+    tambien aplican NetworkPolicy.
     Sin un CNI instalado, los nodos quedan NotReady
     indefinidamente (lo viste en M02).
 
@@ -279,11 +294,13 @@ cual implementacion corre debajo.
     N de CNI     -> Network
     S de CSI     -> Storage
     R de CRI     -> Runtime (contenedores en Ejecucion)
+```
 
 --------------------------------------------------
 6. DIAGRAMA ASCII - OPERATOR RECONCILIATION LOOP
 --------------------------------------------------
 
+```text reference
   Usuario crea:
   apiVersion: cert-manager.io/v1
   kind: Certificate
@@ -315,6 +332,7 @@ cual implementacion corre debajo.
               kubectl get secret
               (certificado TLS listo
                para usar en un Ingress)
+```
 
   DIFERENCIA CLAVE CON UN CRD SIN CONTROLLER:
   Si el paso "CERT-MANAGER CONTROLLER" no existiera,
@@ -332,16 +350,24 @@ cual implementacion corre debajo.
 Ejecutar solo en cka-cp1 (Helm es un cliente,
 no un componente del cluster):
 
+```bash exec
   curl -fsSL -o get_helm.sh \
     https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+```
 
+```bash exec
   chmod 700 get_helm.sh
   ./get_helm.sh
+```
 
 Verificacion:
 
+```bash exec
   helm version
+```
+```text output
   # esperado: version.BuildInfo{Version:"v3.x.x"...}
+```
 
 7.2 HELM - CREAR Y ENTENDER UN CHART PROPIO
 -----------------------------------------------
@@ -349,10 +375,13 @@ Verificacion:
 Antes de usar charts de terceros, entender la
 estructura interna creando uno desde cero:
 
+```bash exec
   helm create mi-app
+```
 
 Esto genera:
 
+```text output
   mi-app/
     Chart.yaml          metadata del chart
     values.yaml          valores por defecto
@@ -361,51 +390,82 @@ Esto genera:
       service.yaml
       _helpers.tpl        funciones reutilizables
     charts/               dependencias (subcharts)
+```
 
 Ver como los templates usan variables de values.yaml:
 
+```bash exec
   cat mi-app/templates/deployment.yaml | grep -A2 image:
+```
 
+```gotemplate template
   # replicas: {{ .Values.replicaCount }}
   # image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+```
 
 Renderizar sin instalar (equivalente a --dry-run):
 
+```bash exec
   helm template mi-app-release ./mi-app
+```
 
 Instalar el release:
 
+```bash exec
   helm install mi-app-release ./mi-app \
     --set replicaCount=3 \
     --set image.tag=1.25
+```
 
 Verificar:
 
+```bash exec
   helm list
+```
+```text output
   # NAME            NAMESPACE  REVISION  STATUS
   # mi-app-release  default    1         deployed
+```
 
+```bash exec
   kubectl get deployments
+```
+```text output
   # mi-app-release-mi-app   3/3   3   3
+```
 
 Actualizar el release (cambiar un value):
 
+```bash exec
   helm upgrade mi-app-release ./mi-app \
     --set replicaCount=5
+```
 
+```bash exec
   helm list
+```
+```text output
   # REVISION pasa a 2
+```
 
 Revertir (rollback) a la revision anterior:
 
+```bash exec
   helm rollback mi-app-release 1
+```
 
+```bash exec
   kubectl get deployment mi-app-release-mi-app
+```
+```text output
   # replicas vuelve a 3
+```
 
 Ver el historial completo:
 
+```bash exec
   helm history mi-app-release
+```
 
 7.3 HELM - INSTALAR UN CHART REAL DE UN REPOSITORIO
 -------------------------------------------------------
@@ -413,46 +473,67 @@ Ver el historial completo:
 Agregar el repositorio oficial de ingress-nginx
 (se usara tambien como controlador de Ingress en M08):
 
+```bash exec
   helm repo add ingress-nginx \
     https://kubernetes.github.io/ingress-nginx
+```
 
+```bash exec
   helm repo update
+```
 
+```bash exec
   helm search repo ingress-nginx
+```
+```text output
   # muestra las versiones disponibles del chart
+```
 
 Inspeccionar los values disponibles antes de instalar:
 
+```bash exec
   helm show values ingress-nginx/ingress-nginx | head -30
+```
 
 Instalar en su propio namespace:
 
+```bash exec
   helm install nginx-ingress ingress-nginx/ingress-nginx \
     --namespace ingress-nginx \
     --create-namespace
+```
 
 Verificar:
 
+```bash exec
   helm list -n ingress-nginx
   kubectl get pods -n ingress-nginx
+```
+```text output
   # controller Running
+```
 
 Desinstalar (dejar limpio para no interferir con M08
 hasta que llegues a ese modulo, opcional):
 
+```bash exec
   helm uninstall nginx-ingress -n ingress-nginx
+```
 
 7.4 KUSTOMIZE - BASE Y OVERLAYS
 -----------------------------------
 
 Crear la estructura de directorios:
 
+```bash exec
   mkdir -p kustomize-lab/base
   mkdir -p kustomize-lab/overlays/desarrollo
   mkdir -p kustomize-lab/overlays/produccion
+```
 
 Base - Deployment comun a todos los entornos:
 
+```bash exec
   cat > kustomize-lab/base/deployment.yaml <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
@@ -476,20 +557,24 @@ spec:
             cpu: 100m
             memory: 128Mi
 EOF
+```
 
 Base - kustomization.yaml (indica que recursos
 componen la base):
 
+```bash exec
   cat > kustomize-lab/base/kustomization.yaml <<'EOF'
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
 - deployment.yaml
 EOF
+```
 
 Overlay desarrollo - solo referencia la base,
 sin cambios (1 replica, imagen base):
 
+```bash exec
   cat > kustomize-lab/overlays/desarrollo/kustomization.yaml <<'EOF'
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -497,10 +582,12 @@ resources:
 - ../../base
 namePrefix: dev-
 EOF
+```
 
 Overlay produccion - patch que sube replicas y
 cambia la imagen, sin tocar la base:
 
+```bash exec
   cat > kustomize-lab/overlays/produccion/patch-replicas.yaml <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
@@ -514,7 +601,9 @@ spec:
       - name: web-app
         image: nginx:1.26
 EOF
+```
 
+```bash exec
   cat > kustomize-lab/overlays/produccion/kustomization.yaml <<'EOF'
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -524,30 +613,47 @@ namePrefix: prod-
 patches:
 - path: patch-replicas.yaml
 EOF
+```
 
 Ver el YAML final SIN aplicar (equivalente a --dry-run):
 
+```bash exec
   kubectl kustomize kustomize-lab/overlays/desarrollo
   kubectl kustomize kustomize-lab/overlays/produccion
+```
 
 Aplicar cada overlay:
 
+```bash exec
   kubectl apply -k kustomize-lab/overlays/desarrollo
   kubectl apply -k kustomize-lab/overlays/produccion
+```
 
 Verificar que son deployments independientes:
 
+```bash exec
   kubectl get deployments
+```
+```text output
   # dev-web-app     1/1
   # prod-web-app    5/5
+```
 
+```bash exec
   kubectl get deployment prod-web-app \
     -o jsonpath='{.spec.template.spec.containers[0].image}'
+```
+```text output
   # nginx:1.26
+```
 
+```bash exec
   kubectl get deployment dev-web-app \
     -o jsonpath='{.spec.template.spec.containers[0].image}'
+```
+```text output
   # nginx:1.25 (la base, sin modificar)
+```
 
 7.5 CRD - CREAR UN RECURSO PERSONALIZADO SIN CONTROLLER
 ------------------------------------------------------------
@@ -556,6 +662,7 @@ Ejemplo clasico de la documentacion oficial de
 Kubernetes, para entender la mecanica antes de
 ver un CRD con controller real:
 
+```bash exec
   kubectl apply -f - <<'EOF'
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -588,15 +695,21 @@ spec:
     shortNames:
     - ct
 EOF
+```
 
 Verificar que el nuevo tipo de recurso existe
 en la API, exactamente igual que un tipo nativo:
 
+```bash exec
   kubectl api-resources | grep crontab
+```
+```text output
   # crontabs   ct   stable.example.com/v1   true   CronTab
+```
 
 Crear una instancia del CRD:
 
+```bash exec
   kubectl apply -f - <<'EOF'
 apiVersion: stable.example.com/v1
 kind: CronTab
@@ -607,18 +720,27 @@ spec:
   image: mi-imagen-cron
   replicas: 3
 EOF
+```
 
+```bash exec
   kubectl get crontabs
   kubectl get ct
+```
+```text output
   # mi-nueva-tarea
+```
 
 DEMOSTRACION DE LA AUSENCIA DE CONTROLLER:
 
+```bash exec
   kubectl get pods
+```
+```text output
   # NINGUN pod se creo. El objeto CronTab existe
   # en etcd (kubectl get ct lo confirma) pero nadie
   # actua sobre el. Esta es la diferencia central
   # explicada en la seccion 5.3 y 5.4.
+```
 
 7.6 OPERATOR REAL - CERT-MANAGER
 ------------------------------------
@@ -629,31 +751,44 @@ produccion. Se instala con Helm (conecta la seccion
 
 Instalar (incluye sus propios CRDs automaticamente):
 
+```bash exec
   helm repo add jetstack https://charts.jetstack.io
   helm repo update
+```
 
+```bash exec
   helm install cert-manager jetstack/cert-manager \
     --namespace cert-manager \
     --create-namespace \
     --set crds.enabled=true
+```
 
 Verificar el controller corriendo:
 
+```bash exec
   kubectl get pods -n cert-manager
+```
+```text output
   # cert-manager, cert-manager-cainjector,
   # cert-manager-webhook, todos Running
+```
 
 Verificar los CRDs que trajo el Operator:
 
+```bash exec
   kubectl get crd | grep cert-manager.io
+```
+```text output
   # certificates.cert-manager.io
   # issuers.cert-manager.io
   # clusterissuers.cert-manager.io
   # (entre otros)
+```
 
 Crear un ClusterIssuer self-signed (el "emisor"
 de certificados):
 
+```bash exec
   kubectl apply -f - <<'EOF'
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
@@ -662,10 +797,12 @@ metadata:
 spec:
   selfSigned: {}
 EOF
+```
 
 Crear un Certificate (aqui es donde se ve el
 reconciliation loop en accion):
 
+```bash exec
   kubectl apply -f - <<'EOF'
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -681,53 +818,97 @@ spec:
   dnsNames:
   - demo.local
 EOF
+```
 
 Observar la reconciliacion (contraste directo con
 7.5, donde no pasaba nada):
 
+```bash exec
   kubectl get certificate demo-cert
+```
+```text output
   # READY pasa de False a True en pocos segundos
+```
 
+```bash exec
   kubectl get secret demo-cert-tls
+```
+```text output
   # el Operator CREO este Secret automaticamente,
   # sin que tu lo hayas hecho manualmente
+```
 
+```bash exec
   kubectl get secret demo-cert-tls -o yaml | grep -A1 "tls.crt"
+```
+```text output
   # el certificado esta ahi, generado por el controller
+```
 
 7.7 EXTENSION INTERFACES - IDENTIFICAR LAS TUYAS
 ------------------------------------------------------
 
 CRI (Container Runtime Interface):
 
+```bash exec
   kubectl get nodes -o wide
+```
+```text output
   # columna CONTAINER-RUNTIME: containerd://2.3.1
+```
 
+```bash exec
   crictl info | grep -A2 '"runtimeName"'
+```
+```text output
   # confirma containerd como el runtime activo
+```
 
 CNI (Container Network Interface):
 
+```bash exec
   kubectl get pods -n kube-system | grep calico
+```
+```text output
   # calico-node, calico-kube-controllers Running
+```
 
+```bash exec
   ls /etc/cni/net.d/
+```
+```text output
   # ficheros de configuracion de Calico
+```
 
-  kubectl get nodes cka-cp1 \
-    -o jsonpath='{.spec.podCIDR}'
-  # el rango de IPs que Calico gestiona en este nodo
+```bash exec
+  kubectl get ippools.crd.projectcalico.org -o wide
+  kubectl get blockaffinities.crd.projectcalico.org -A
+```
+```text output
+  # IPPools y bloques administrados por Calico-IPAM
+```
+
+Node.spec.podCIDR no demuestra por si solo la asignacion de
+Calico-IPAM. Ese campo se usa directamente con host-local IPAM.
 
 CSI (Container Storage Interface):
 
+```bash exec
   kubectl get csidrivers
+```
+```text output
   # en este cluster: vacio o "No resources found"
   # Explicacion: no se ha instalado ningun driver
   # CSI porque no hay backend de storage dinamico
   # configurado. Se resuelve en M11.
+```
 
+```bash exec
   kubectl get storageclass
+```
+```text output
   # tambien vacio por la misma razon
+```
 
 --------------------------------------------------
 8. LABORATORIO GUIADO
@@ -741,15 +922,20 @@ cada herramienta.
 Paso 1 - Version "estable" con Helm, usando el
 chart propio creado en 7.2:
 
+```bash exec
   helm install app-estable ./mi-app \
     --set replicaCount=2 \
     --set image.tag=1.25
+```
 
 Paso 2 - Version "canary" con Kustomize, usando
 un overlay nuevo sobre la misma base de 7.4:
 
+```bash exec
   mkdir -p kustomize-lab/overlays/canary
+```
 
+```bash exec
   cat > kustomize-lab/overlays/canary/patch.yaml <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
@@ -763,7 +949,9 @@ spec:
       - name: web-app
         image: nginx:1.26
 EOF
+```
 
+```bash exec
   cat > kustomize-lab/overlays/canary/kustomization.yaml <<'EOF'
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -773,18 +961,29 @@ namePrefix: canary-
 patches:
 - path: patch.yaml
 EOF
+```
 
+```bash exec
   kubectl apply -k kustomize-lab/overlays/canary
+```
 
 Paso 3 - verificar ambas conviven sin conflicto:
 
+```bash exec
   kubectl get deployments
+```
+```text output
   # app-estable-mi-app   2/2   (gestionado por Helm)
   # canary-web-app       1/1   (gestionado por Kustomize)
+```
 
+```bash exec
   helm list
+```
+```text output
   # solo muestra app-estable (Kustomize no usa
   # el mecanismo de releases de Helm)
+```
 
 Paso 4 - razonamiento de cuando usar cada uno:
 
@@ -843,7 +1042,9 @@ Pregunta 4:
   al cluster?
 
 Respuesta:
+```text reference
   kubectl kustomize <ruta-del-overlay>
+```
 
 Pregunta 5:
   Que interfaz de extension (CNI, CSI o CRI) es
@@ -880,34 +1081,59 @@ TAREA:
 
 CRITERIOS DE EXITO:
 
+```bash exec
   helm list -n examen-helm
+```
+```text output
   # lab-ingress   REVISION 2   deployed
+```
 
+```bash exec
   kubectl get deployment lab-ingress-ingress-nginx-controller \
     -n examen-helm
+```
+```text output
   # 2/2
+```
 
+```bash exec
   kubectl get deployment stage-api
+```
+```text output
   # 3/3
+```
 
+```bash exec
   cat /tmp/revision.txt
+```
+```text output
   # 2
+```
 
 SOLUCION DE REFERENCIA (no mirar hasta terminar):
 
+```bash exec
   helm repo add ingress-nginx \
     https://kubernetes.github.io/ingress-nginx
   helm repo update
+```
 
+```bash exec
   helm install lab-ingress ingress-nginx/ingress-nginx \
     -n examen-helm --create-namespace
+```
 
+```bash exec
   helm upgrade lab-ingress ingress-nginx/ingress-nginx \
     -n examen-helm \
     --set controller.replicaCount=2
+```
 
+```bash exec
   mkdir -p lab-kustomize/base lab-kustomize/overlays/stage
+```
 
+```bash exec
   cat > lab-kustomize/base/deployment.yaml <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
@@ -927,14 +1153,18 @@ spec:
       - name: api
         image: nginx:1.25
 EOF
+```
 
+```bash exec
   cat > lab-kustomize/base/kustomization.yaml <<'EOF'
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
 - deployment.yaml
 EOF
+```
 
+```bash exec
   cat > lab-kustomize/overlays/stage/patch.yaml <<'EOF'
 apiVersion: apps/v1
 kind: Deployment
@@ -943,7 +1173,9 @@ metadata:
 spec:
   replicas: 3
 EOF
+```
 
+```bash exec
   cat > lab-kustomize/overlays/stage/kustomization.yaml <<'EOF'
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -953,12 +1185,17 @@ namePrefix: stage-
 patches:
 - path: patch.yaml
 EOF
+```
 
+```bash exec
   kubectl apply -k lab-kustomize/overlays/stage
+```
 
+```bash exec
   helm list -n examen-helm \
     -o json | grep -o '"revision":"[0-9]*"' \
     | grep -o '[0-9]*' > /tmp/revision.txt
+```
 
 --------------------------------------------------
 11. TROUBLESHOOTING - CASOS REALES
@@ -968,11 +1205,13 @@ CASO 1: helm install falla con CRDs ya existentes
 -----------------------------------------------------
 
 Sintoma:
+```text output
   Error: rendered manifests contain a resource that
   already exists. Unable to continue with install:
   CustomResourceDefinition "certificates.cert-manager.io"
   in namespace "" exists and cannot be imported into
   the current release
+```
 
 Causa:
   Un intento anterior de instalacion (o una
@@ -981,46 +1220,62 @@ Causa:
   como parte de ningun release suyo.
 
 Diagnostico:
+```bash exec
   kubectl get crd | grep cert-manager.io
   helm list -A
+```
+```text reference
   # confirmar si existe algun release previo
+```
 
 Solucion:
   Si es un release huerfano, eliminar los CRDs
   manualmente antes de reinstalar (accion destructiva,
   perderia las instancias existentes):
+```bash exec
     kubectl delete crd certificates.cert-manager.io \
       issuers.cert-manager.io \
       clusterissuers.cert-manager.io
+```
 
-  O usar helm upgrade --install en lugar de
-  helm install, que crea el release si no existe
-  o lo actualiza si ya existe:
-    helm upgrade --install cert-manager \
-      jetstack/cert-manager -n cert-manager \
-      --create-namespace --set crds.enabled=true
+  helm upgrade --install solo sirve si el release ya posee
+  esos CRDs o si no existe conflicto de ownership. No adopta
+  automaticamente recursos creados por otra instalacion.
+  Antes de adoptar, verifica versiones, datos y metadatos.
+  Como alternativas, gestiona los CRDs por separado o usa un
+  mecanismo explicito de adopcion compatible con tu Helm.
 
 CASO 2: el patch de Kustomize no se aplica
 ----------------------------------------------
 
 Sintoma:
+```text reference
   kubectl apply -k overlay no produce el cambio
   esperado (replicas siguen en el valor de la base).
+```
 
 Diagnostico:
+```bash exec
   kubectl kustomize overlays/produccion
+```
+```text reference
   # renderizar sin aplicar y revisar visualmente
   # el YAML resultante
+```
 
   Causa mas comun: el metadata.name del patch NO
   coincide exactamente con el metadata.name del
   recurso en la base. Kustomize empareja recursos
   por (kind + name), no por posicion en el fichero.
 
+```bash exec
   cat overlays/produccion/patch-replicas.yaml \
     | grep name:
   cat base/deployment.yaml | grep -A1 "^metadata:"
+```
+```text reference
   # ambos deben decir "name: web-app" exactamente
+```
 
 Solucion:
   Corregir el name en el patch para que coincida
@@ -1031,30 +1286,44 @@ CASO 3: certificate se queda en READY False
 -----------------------------------------------
 
 Sintoma:
+```bash exec
   kubectl get certificate demo-cert
+```
+```text output
   # READY   False   (no cambia despues de minutos)
+```
 
 Diagnostico paso a paso:
 
   1. Ver el estado detallado del objeto:
+```bash exec
      kubectl describe certificate demo-cert
+```
+```text reference
      # revisar la seccion Events y Conditions
+```
 
   2. Ver si el CertificateRequest asociado se creo:
+```text reference
      kubectl get certificaterequest
      kubectl describe certificaterequest <nombre>
+```
 
   3. Ver logs del controller (el "cerebro" del
      Operator, aqui es donde esta la logica real):
+```bash exec
      kubectl logs -n cert-manager \
        -l app.kubernetes.io/name=cert-manager \
        --tail=50
+```
 
   4. Causas comunes:
      - El ClusterIssuer referenciado no existe o
        tiene un typo en issuerRef.name
      - El ClusterIssuer mismo no esta Ready:
+```bash exec
        kubectl describe clusterissuer self-signed-issuer
+```
      - El webhook de cert-manager no esta listo aun
        (tarda unos segundos tras la instalacion)
 
@@ -1073,6 +1342,7 @@ desde cka-cp1.
 
 ALTERNATIVA K3S (plan B):
 
+```text reference
   Helm y Kustomize funcionan de forma identica en
   K3s: son herramientas de cliente independientes
   del tipo de cluster.
@@ -1094,11 +1364,15 @@ ALTERNATIVA K3S (plan B):
   mas simple). Si ejecutas kubectl get csidrivers
   en K3s por defecto, tambien apareceria vacio,
   igual que en tu cluster kubeadm sin CSI instalado.
+```
 
 LIMPIEZA DEL MODULO:
 
+```bash exec
   helm uninstall app-estable
   helm uninstall lab-ingress -n examen-helm
+  kubectl delete certificate demo-cert --ignore-not-found
+  kubectl delete clusterissuer self-signed-issuer --ignore-not-found
   helm uninstall cert-manager -n cert-manager
   kubectl delete namespace examen-helm cert-manager
   kubectl delete crd crontabs.stable.example.com
@@ -1107,6 +1381,7 @@ LIMPIEZA DEL MODULO:
   kubectl delete -k kustomize-lab/overlays/canary
   kubectl delete -k lab-kustomize/overlays/stage
   rm -rf mi-app kustomize-lab lab-kustomize get_helm.sh
+```
 
 ==================================================
 FIN M03b - HELM, KUSTOMIZE, CRDS, OPERATORS

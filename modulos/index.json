@@ -3,5 +3,6 @@
   "M01-arquitectura.txt",
   "M02-instalacion-kubeadm.txt",
   "M03-rbac-seguridad.txt",
-  "M03b-helm-kustomize-crds.txt"
+  "M03b-helm-kustomize-crds.txt",
+  "M04-workloads-deploy-ds-stateful.txt"
 ]
