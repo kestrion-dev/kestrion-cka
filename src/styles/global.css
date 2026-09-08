@@ -288,10 +288,28 @@ h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.1; }
 .code-role { font: 700 .7rem/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
 .code-toolbar button, .timer-actions button { min-height: 2.1rem; padding-inline: .8rem; border: 1px solid currentColor; border-radius: .4rem; font: inherit; font-weight: 700; cursor: pointer; }
 .code-toolbar button { color: #c7cad3; background: transparent; }
-.quiz-card, .study-timer, .lab-solution { margin-block: 1.5rem; padding: 1.25rem; border: 1px solid var(--border); border-radius: .6rem; background: var(--surface); }
+.quiz-card, .study-timer, .lab-solution { margin-block: 1.5rem; padding: 1.25rem; border: 1px solid var(--border); border-radius: .6rem; background: var(--surface); overflow: hidden; }
 .quiz-label, .quiz-question { margin-top: 0; }
 .quiz-label { color: var(--accent-text); font-weight: 700; }
-.quiz-answer summary, .lab-solution summary { min-height: 44px; cursor: pointer; font-weight: 700; }
+.quiz-answer summary, .lab-solution summary {
+  margin: -1.25rem -1.25rem 0; padding: 1rem 1.25rem;
+  min-height: 44px; display: flex; align-items: center; gap: .5rem;
+  list-style: none; cursor: pointer; font-weight: 700; color: var(--accent-text);
+  background:
+    repeating-linear-gradient(135deg, color-mix(in srgb, var(--accent) 20%, transparent) 0 5px, color-mix(in srgb, var(--accent) 6%, transparent) 5px 10px),
+    var(--accent-soft);
+  transition: filter 150ms ease;
+}
+.quiz-answer summary::-webkit-details-marker, .lab-solution summary::-webkit-details-marker { display: none; }
+.quiz-answer summary::before, .lab-solution summary::before {
+  content: ""; flex: 0 0 auto; width: 1rem; height: 1rem;
+  background-color: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='11' width='16' height='9' rx='2'/%3E%3Cpath d='M8 11V7a4 4 0 0 1 8 0v4'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='11' width='16' height='9' rx='2'/%3E%3Cpath d='M8 11V7a4 4 0 0 1 8 0v4'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.quiz-answer summary:hover, .lab-solution summary:hover { filter: brightness(1.08); }
+.quiz-answer[open] summary, .lab-solution[open] summary { margin-bottom: 1.25rem; border-bottom: 1px solid var(--border); background: var(--surface); color: inherit; }
+.quiz-answer[open] summary::before, .lab-solution[open] summary::before { opacity: .5; }
 .study-timer { display: grid; grid-template-columns: 1fr auto; gap: .5rem 1rem; align-items: center; }
 .timer-target { margin: 0; }
 .timer-display { font: 800 2rem/1 var(--font-mono); font-variant-numeric: tabular-nums; }

@@ -49,16 +49,33 @@ function transformQuizzes(children) {
   }
 }
 
+function solutionMarkerText(node) {
+  if (node.type !== 'element' || node.tagName !== 'p') return null;
+  const value = plainText(node).trim();
+  if (/^Solución de referencia/i.test(value)) return value;
+  if (/^Solución Tarea\s+\d+:?$/i.test(value)) return value;
+  return null;
+}
+
+function solutionSummaryText(markerText) {
+  const task = markerText.match(/^Solución Tarea\s+(\d+):?$/i);
+  return task ? `Mostrar solución de referencia — Tarea ${task[1]}` : 'Mostrar solución de referencia';
+}
+
 function transformSolutions(children) {
   for (let index = 0; index < children.length; index += 1) {
-    const marker = children[index];
-    if (marker.type !== 'element' || marker.tagName !== 'p' || !/^Solución de referencia/i.test(plainText(marker).trim())) continue;
+    const markerText = solutionMarkerText(children[index]);
+    if (!markerText) continue;
 
     let end = index + 1;
-    while (end < children.length && !(children[end].type === 'element' && /^h[1-2]$/.test(children[end].tagName))) end += 1;
+    while (
+      end < children.length
+      && !(children[end].type === 'element' && /^h[1-2]$/.test(children[end].tagName))
+      && !solutionMarkerText(children[end])
+    ) end += 1;
     const content = children.slice(index + 1, end);
     const details = element('details', { className: ['lab-solution'] }, [
-      element('summary', {}, [text('Mostrar solución de referencia')]),
+      element('summary', {}, [text(solutionSummaryText(markerText))]),
       ...content,
     ]);
     children.splice(index, end - index, details);

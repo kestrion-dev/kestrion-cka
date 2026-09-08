@@ -828,6 +828,19 @@ La definición del primer producto premium y la posible sincronización de progr
 
 No se seleccionarán ahora proveedores de identidad, pagos, almacenamiento o infraestructura de simuladores.
 
+**Idea registrada (2026-09-08, no decidida):** el propietario contempla, en un futuro cercano, un dominio tipo academia con varias certificaciones como subcarpetas, por ejemplo:
+
+```text
+academia.kestrion.dev/
+├── cka/
+│   ├── modulos/
+│   └── modulos/entorno-kubectl/
+├── ckad/   (futuro)
+└── cks/    (futuro)
+```
+
+Esto no es solo un cambio de dominio (ya cubierto por `site` en `astro.config.mjs`): añadiría un prefijo de ruta (`/cka/`) delante de `/modulos/`, lo que en Astro se resuelve con la opción `base` de configuración, más revisar cualquier enlace absoluto que asuma `/modulos/` en la raíz (sidebar, breadcrumbs, sitemap, `robots.txt.ts`, `modules-manifest.json.ts`). No condiciona nada de V2 gratuita ni requiere acción ahora.
+
 ## 24. Instrucciones para agentes de IA
 
 Antes de proponer o implementar V2, el agente debe leer completo `ARQUITECTURA-V2.md`. También leerá `FORMATO-MODULOS-V2.md` cuando la tarea afecte contenido.
@@ -1168,22 +1181,31 @@ Cada hallazgo se documentará antes de ampliar el trabajo. Ejecutar esta fase re
 - Con esto, un futuro cambio de dominio queda reducido a una sola línea (`site` en `astro.config.mjs`) sin ningún otro fichero que actualizar en el código. Quedan fuera del código, sin poder optimizarse desde aquí: la configuración de dominio personalizado/DNS en Cloudflare, y, si llega a haber tráfico real, los redirects 301 y volver a verificar Search Console.
 - Preview local reiniciada en `http://127.0.0.1:4321/`.
 
+### 2026-09-08 — Commit local del checkpoint V2
+
+- Propietario aprobó el commit. Creado `cfcc816` en `v2` (local, sin push): los 18 módulos, el rediseño, el landing y las correcciones de esta sesión. Working tree limpio.
+
+### 2026-09-08 — Push a `v2` aprobado y hecho
+
+- Propietario aprobó el push. `git push -u origin v2` hecho, rama `v2` creada en `origin` (commit `cfcc816`). `main` sigue intacta.
+- Registrada en la sección 23.2 una idea a futuro del propietario (no decidida): posible dominio `academia.kestrion.dev` con `cka/`, `ckad/`, `cks/` como subcarpetas — implicaría usar `base` de Astro y revisar enlaces absolutos a `/modulos/`.
+
+### 2026-09-08 — Fase 2: SEO/no-JS OK; arreglado M18 sin soluciones ocultas; estilo "obscurecido" en spoilers
+
+- Revisada la preview real (no local): 20/20 URLs del sitemap en 200, 1 H1 y canonical única por página, OG/Twitter completos, sin noindex, `/app/`/TXT en 404, quiz oculto funcionando sin JS (confirmado con `curl`, que no ejecuta JS).
+- Hallazgo: M18 usaba 18 marcadores "Solución Tarea N:" que el transformador no reconocía (solo reconocía "Solución de referencia"), así que sus 18 soluciones se mostraban siempre visibles, al revés de lo que el propio módulo pide. Aprobado y corregido en `src/lib/rehype-study-structure.mjs`: ahora reconoce ambos patrones y cierra cada spoiler en el siguiente marcador o el siguiente `##`. Verificado: 18/18 soluciones de M18 ahora ocultas, el resto de módulos sin cambios.
+- El propietario recordó el cuadro borroso de V1 para soluciones/respuestas. Como `<details>` no renderiza su contenido mientras está cerrado (no hay nada que "emborronar" de verdad sin romper el requisito de accesibilidad sin JS), se implementó el equivalente más cercano: la cabecera cerrada (`summary`) de quiz y soluciones ahora tiene un fondo con textura rayada en el color de acento y un icono de candado, en vez de ser un texto plano; al abrir vuelve a fondo normal. Mecanismo sigue siendo `<details>` nativo, sin JS.
+- `npm run ci` verde. Preview local reiniciada en `http://127.0.0.1:4321/`.
+
 ### Estado para continuar
 
-**Los 18 módulos del curso completo están incorporados en `src/content/modulos/`**, verificados con `npm run ci` (typecheck 0 errores, 9/9 tests, build 21 páginas, `validate-build.mjs` 30 artefactos sin runtime V1, dry-run de Cloudflare sin publicar). Slugs: `entorno-laboratorio-kubectl` (M01), `arquitectura-kubernetes` (M02), `kubeadm-etcd-backup-restore-upgrade` (M03), `control-plane-alta-disponibilidad` (M04), `rbac-seguridad-cluster` (M05), `helm-kustomize-crds-operators` (M06), `workloads-deployments-daemonsets-statefulsets` (M07), `jobs-cronjobs-gestion-recursos` (M08), `scheduling-avanzado-affinity-taints-priority` (M09), `services-kube-proxy` (M10), `ingress-gateway-api` (M11), `networkpolicy-segmentacion` (M12), `coredns-resolucion-nombres` (M13), `storage-pv-pvc-storageclass` (M14), `troubleshooting-cluster-control-plane` (M15), `troubleshooting-nodos-networking` (M16), `troubleshooting-aplicaciones-storage` (M17), `simulacro-cka-cronometrado` (M18).
-
-Todas las correcciones aprobadas de las 18 revisiones técnicas (`REVISION-TECNICA-M01.md` a `M18.md`, en la raíz) están aplicadas: M04 (matices de máquinas/quorum), M07 (`--no-headers` y `--disable-agent`), M11 (versión de Gateway API), M14 (versión de local-path-provisioner). Además, durante la incorporación el validador detectó y se corrigieron 3 placeholders reales dentro de `bash exec` (M07 y M10) que las revisiones técnicas no habían detectado por no auditar formato, solo exactitud factual — ver entrada de bitácora de incorporación para detalle.
-
-El rediseño visual (sidebar única con progreso por módulo, dashboard de cabecera, tema pastel/violeta, checklist con contraste corregido) se aplica automáticamente a los 18 módulos vía los componentes compartidos; no requiere trabajo adicional por módulo.
-
-**Hecho**: referencias cruzadas entre módulos aplicadas (38 enlaces, acotadas a las secciones de Prerrequisitos; ver bitácora "Referencias cruzadas entre módulos aplicadas"). El resto de menciones "M0X" en el cuerpo del texto se dejó como texto plano a propósito, para no saturar de enlaces.
+Checkpoint V2 en `origin/v2` (commit `cfcc816`, desactualizado tras los cambios de esta entrada — falta commit/push nuevo). `main` (producción) intacta.
 
 **Pendiente, en este orden**:
-1. Si llega contenido nuevo (más allá de los 18 módulos ya entregados), seguir el flujo de la sección 10.4 (revisión técnica con fuentes oficiales, metadatos propuestos, informe `REVISION-TECNICA-M0X.md`, esperar aprobación) antes de tocar `src/content/modulos/`.
-2. Antes de pedir el commit: revisión completa de Fase 2 (sección 18) — integridad de contenido, accesibilidad, móvil/escritorio, funcionamiento sin JavaScript, auditoría SEO — sobre los 18 módulos ya incorporados, no solo M01/M02.
-3. Solo pedir aprobación para commit/push del checkpoint a `v2` cuando el propietario lo indique explícitamente, no antes.
-
-No hay commit, push, preview remota ni despliegue.
+1. Que el propietario revise visualmente el nuevo estilo de spoiler y M18.
+2. Terminar Fase 2 si falta algo (accesibilidad de teclado/foco y móvil no verificados con herramientas automáticas en esta sesión, solo estructuralmente).
+3. Commit + push de este ajuste cuando el propietario lo apruebe.
+4. Solo pedir aprobación para el merge a `main` (producción) cuando el propietario lo indique explícitamente.
 
 ## 30. Traspaso a otro agente de IA
 
