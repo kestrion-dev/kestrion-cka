@@ -1224,9 +1224,16 @@ Cada hallazgo se documentará antes de ampliar el trabajo. Ejecutar esta fase re
 - Verificado en producción (`https://cka.kestrion.dev`, no preview): título y hero de V2 correctos, `/app/` → 404 (V1 retirada), `/sitemap-index.xml` → `sitemap-0.xml` con exactamente 20 URLs (home + `/modulos/` + 18 módulos), `robots.txt` correcto con referencia al sitemap, skip links presentes en una página de módulo real.
 - V2 es ahora producción. V1 retirada.
 
+### 2026-09-08 — Verificación post-lanzamiento: Search Console, rollback y clon limpio
+
+- Search Console: confirmado por DNS (`google-site-verification` TXT en el dominio raíz `kestrion.dev`), verificación a nivel de dominio, cubre `cka.kestrion.dev`, independiente del código — intacta tras la migración.
+- Cloudflare Web Analytics: sin script en el HTML (coherente con la variante automática por zona, que no usa código); no verificable desde fuera del panel de Cloudflare, queda para que el propietario lo confirme ahí.
+- Rollback probado de verdad (no solo teorizado): `git revert --no-commit -m 1 3e27484` contra el `main` real, sin commit ni push, luego `git revert --abort` (nada quedó a medias). Resultado: todo el código/contenido revierte limpio a V1; único conflicto en `ARQUITECTURA-V2.md` (doc de bitácora, no código), por los 2 commits posteriores al merge — resoluble en segundos conservando la versión de HEAD.
+- Build reproducible verificado con clon limpio real: `git clone` del repo en directorio nuevo + `npm ci` + `npm run ci` completos, sin nada heredado del entorno de trabajo habitual. Todo verde.
+
 ### Estado para continuar
 
-V2 en producción (`main`, commit `3e27484`). Sin pendientes de la arquitectura original.
+V2 en producción (`main`, commit `c5dce77`). Arquitectura completa y verificada: contenido, interfaz, SEO, accesibilidad, rollback y reproducibilidad del build. Único punto que el propietario debe confirmar él mismo (fuera del alcance de este agente): que Cloudflare Web Analytics siga activo en el panel.
 
 ## 30. Traspaso a otro agente de IA
 
