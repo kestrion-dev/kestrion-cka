@@ -34,6 +34,7 @@ const pills: { key: string; value: string }[] = [
 
 <BaseLayout title={`${entry.data.title} | Kestrion CKA`} description={entry.data.description}>
   <div class="docs-shell">
+    <a class="skip-link" href="#modulo-contenido">Saltar índice de módulos</a>
     <aside class="sidebar" aria-label="Todos los módulos" data-sidebar>
       <p class="sidebar-title">Módulos</p>
       <ol class="module-nav">
@@ -74,7 +75,7 @@ const pills: { key: string; value: string }[] = [
           <button class="nav-toggle icon-button" type="button" data-sidebar-toggle aria-label="Mostrar índice de módulos">☰</button>
           <a href="/">Inicio</a><span aria-hidden="true">/</span><a href="/modulos/">Módulos</a><span aria-hidden="true">/</span><span>{entry.data.title}</span>
         </nav>
-        <article class="module-content">
+        <article class="module-content" id="modulo-contenido" tabindex="-1">
           <header class="module-hero">
             <div class="hero-row">
               <span class="module-chip">{entry.data.code}</span>

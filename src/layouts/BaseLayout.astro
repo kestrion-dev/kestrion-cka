@@ -17,7 +17,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
     <link rel="sitemap" href="/sitemap-index.xml" />
@@ -44,6 +44,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     </script>
   </head>
   <body>
+    <a class="skip-link" href="#contenido">Saltar al contenido</a>
     <header class="site-header">
       <div class="site-header-inner">
         <a class="brand" href="/">
@@ -62,7 +63,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
         </div>
       </div>
     </header>
-    <main><slot /></main>
+    <main id="contenido" tabindex="-1"><slot /></main>
     <SiteFooter />
   </body>
 </html>

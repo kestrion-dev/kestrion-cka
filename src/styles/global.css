@@ -20,6 +20,7 @@
   --accent-soft: #e9e8fd;
   --meter-track: #dfe0f3;
   --border-strong: #b9bede;
+  --toggle-border: #8288ab;
   --hero-a: #2c2570;
   --hero-b: #5747e0;
 }
@@ -38,6 +39,7 @@
   --accent-soft: #241f47;
   --meter-track: #2a2942;
   --border-strong: #56546f;
+  --toggle-border: #7c7a9a;
   --hero-a: #1c1840;
   --hero-b: #4d3fd6;
 }
@@ -55,6 +57,7 @@
     --accent-text: #b6aeff;
     --accent-soft: #241f47;
     --meter-track: #2a2942;
+    --toggle-border: #7c7a9a;
     --hero-a: #1c1840;
     --hero-b: #4d3fd6;
   }
@@ -91,6 +94,9 @@ h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.1; }
 .page-container { width: min(60rem, calc(100% - 3rem)); margin-inline: auto; }
 
 /* -------------------------------------------------------------- cabecera */
+
+.skip-link { position: fixed; top: -3rem; left: .75rem; z-index: 50; padding: .65rem 1rem; border-radius: .5rem; background: var(--accent); color: #fff; font-weight: 700; text-decoration: none; transition: top 150ms ease; }
+.skip-link:focus { top: .75rem; }
 
 .site-header { position: sticky; top: 0; z-index: 30; height: var(--nav-height); display: flex; align-items: center; background: color-mix(in srgb, var(--bg-nav) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
 .site-header-inner { width: min(90rem, calc(100% - 3rem)); margin-inline: auto; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
@@ -317,7 +323,7 @@ h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.1; }
 .timer-actions button { color: #fff; background: var(--accent); border-color: transparent; }
 .study-timer[data-overtime="true"] .timer-display { color: #d92d20; }
 .section-completion { display: flex; justify-content: flex-end; padding-block: .5rem 1.5rem; }
-.done-toggle { flex: 0 0 auto; display: inline-grid; place-items: center; width: 1.8rem; height: 1.8rem; padding: 0; border: 1.5px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: transparent; box-shadow: 0 1px 3px rgb(0 0 0 / .3); cursor: pointer; transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease; }
+.done-toggle { flex: 0 0 auto; display: inline-grid; place-items: center; width: 1.8rem; height: 1.8rem; padding: 0; border: 1.5px solid var(--toggle-border); border-radius: 999px; background: var(--surface); color: transparent; box-shadow: 0 1px 3px rgb(0 0 0 / .3); cursor: pointer; transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease; }
 .done-toggle:hover { border-color: var(--accent); color: var(--accent); }
 .done-toggle.on { border-color: var(--accent); background: var(--accent); color: #fff; box-shadow: 0 1px 8px color-mix(in srgb, var(--accent) 50%, transparent); }
 .module-pagination { display: flex; justify-content: space-between; gap: 1rem; padding-block: 3rem; font-size: .9rem; }

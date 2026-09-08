@@ -1197,15 +1197,26 @@ Cada hallazgo se documentará antes de ampliar el trabajo. Ejecutar esta fase re
 - El propietario recordó el cuadro borroso de V1 para soluciones/respuestas. Como `<details>` no renderiza su contenido mientras está cerrado (no hay nada que "emborronar" de verdad sin romper el requisito de accesibilidad sin JS), se implementó el equivalente más cercano: la cabecera cerrada (`summary`) de quiz y soluciones ahora tiene un fondo con textura rayada en el color de acento y un icono de candado, en vez de ser un texto plano; al abrir vuelve a fondo normal. Mecanismo sigue siendo `<details>` nativo, sin JS.
 - `npm run ci` verde. Preview local reiniciada en `http://127.0.0.1:4321/`.
 
+### 2026-09-08 — Commit y push del ajuste de spoilers
+
+- Propietario aprobó. Commit `ac794d7` en `v2`, pusheado a `origin/v2`.
+
+### 2026-09-08 — Fase 2: accesibilidad de teclado/foco, contraste y táctil
+
+- Comprobado sin hallazgos: sin `onclick`/`role="button"` (todo nativo `<button>`/`<a>`/`<details>`), sin `<img>` sin alt (no hay `<img>`), sin `tabindex` suelto, botón sin `type` en `SearchDialog.astro` correcto (patrón nativo `<form method="dialog">`).
+- Corregido `<meta name="viewport">`: faltaba `initial-scale=1`.
+- Corregido: no había enlace "saltar al contenido". Añadidos dos: uno global en `BaseLayout.astro` (`#contenido`, salta cabecera) y uno en la página de módulo (`#modulo-contenido`, salta el índice lateral de 18 módulos antes de llegar al artículo) — visualmente ocultos hasta recibir foco (`.skip-link` en `global.css`).
+- Contraste calculado (WCAG) sobre los tokens de color: texto y enlaces en ambos temas ≥ 6:1 (holgado). Hallazgo real: el borde de `.done-toggle` (checklist) usaba `--border-strong`, con solo 1.83:1 (claro) / 2.37:1 (oscuro) contra el fondo, por debajo del 3:1 exigido para límites de componentes interactivos. Corregido con un token nuevo `--toggle-border` (3.47:1 claro, 4.18:1 oscuro) usado solo en ese botón, sin tocar `--border-strong` (evita efectos en `.mock-bar .dot`).
+- Sin corregir, señalado para decisión del propietario: `.done-toggle` mide 1.8rem (~29px), por debajo del táctil recomendado de 44px — pero ese tamaño discreto fue un pedido explícito de esta misma sesión para igualar V1, así que no se cambia unilateralmente.
+- `npm run ci` verde (9 tests, build y `check:build`/`check:cloudflare` limpios). Verificado en `dist/`: ambos `skip-link` presentes en el HTML generado.
+
 ### Estado para continuar
 
-Checkpoint V2 en `origin/v2` (commit `cfcc816`, desactualizado tras los cambios de esta entrada — falta commit/push nuevo). `main` (producción) intacta.
+Checkpoint V2 en `origin/v2` (commit `ac794d7`) más los cambios de accesibilidad de esta entrada, aún sin commit. `main` (producción) intacta.
 
 **Pendiente, en este orden**:
-1. Que el propietario revise visualmente el nuevo estilo de spoiler y M18.
-2. Terminar Fase 2 si falta algo (accesibilidad de teclado/foco y móvil no verificados con herramientas automáticas en esta sesión, solo estructuralmente).
-3. Commit + push de este ajuste cuando el propietario lo apruebe.
-4. Solo pedir aprobación para el merge a `main` (producción) cuando el propietario lo indique explícitamente.
+1. Pedir al propietario si aprueba el commit/push de los cambios de accesibilidad (skip links, contraste `.done-toggle`, viewport), y si quiere cambiar el tamaño táctil de `.done-toggle` en móvil.
+2. Solo pedir aprobación para el merge a `main` (producción) cuando el propietario lo indique explícitamente.
 
 ## 30. Traspaso a otro agente de IA
 
