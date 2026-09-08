@@ -1210,12 +1210,16 @@ Cada hallazgo se documentará antes de ampliar el trabajo. Ejecutar esta fase re
 - Sin corregir, señalado para decisión del propietario: `.done-toggle` mide 1.8rem (~29px), por debajo del táctil recomendado de 44px — pero ese tamaño discreto fue un pedido explícito de esta misma sesión para igualar V1, así que no se cambia unilateralmente.
 - `npm run ci` verde (9 tests, build y `check:build`/`check:cloudflare` limpios). Verificado en `dist/`: ambos `skip-link` presentes en el HTML generado.
 
+### 2026-09-08 — Commit y push de accesibilidad Fase 2
+
+- Propietario aprobó ("siguiente"). Commit `2bce951` en `v2`, pusheado a `origin/v2`.
+
 ### Estado para continuar
 
-Checkpoint V2 en `origin/v2` (commit `ac794d7`) más los cambios de accesibilidad de esta entrada, aún sin commit. `main` (producción) intacta.
+Checkpoint V2 en `origin/v2` (commit `2bce951`). `main` (producción) intacta. Fase 2 completa.
 
 **Pendiente, en este orden**:
-1. Pedir al propietario si aprueba el commit/push de los cambios de accesibilidad (skip links, contraste `.done-toggle`, viewport), y si quiere cambiar el tamaño táctil de `.done-toggle` en móvil.
+1. Decidir si se cambia el tamaño táctil de `.done-toggle` (1.8rem/~29px, bajo el recomendado 44px) — pendiente de decisión del propietario, no cambiado unilateralmente.
 2. Solo pedir aprobación para el merge a `main` (producción) cuando el propietario lo indique explícitamente.
 
 ## 30. Traspaso a otro agente de IA
