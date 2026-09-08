@@ -1214,13 +1214,15 @@ Cada hallazgo se documentará antes de ampliar el trabajo. Ejecutar esta fase re
 
 - Propietario aprobó ("siguiente"). Commit `2bce951` en `v2`, pusheado a `origin/v2`.
 
+### 2026-09-08 — `.done-toggle` ampliado a tamaño táctil
+
+- Propietario pidió algo "útil y visible" en vez de solo ampliar el área invisible. Ampliado el círculo de 1.8rem (~29px) a 2.75rem (44px) e icono proporcionalmente, mismo estilo discreto. `npm run ci` verde. Commit `929def3` en `v2`, pusheado a `origin/v2`.
+
 ### Estado para continuar
 
-Checkpoint V2 en `origin/v2` (commit `2bce951`). `main` (producción) intacta. Fase 2 completa.
+Checkpoint V2 en `origin/v2` (commit `929def3`). `main` (producción) intacta. Fase 2 completa.
 
-**Pendiente, en este orden**:
-1. Decidir si se cambia el tamaño táctil de `.done-toggle` (1.8rem/~29px, bajo el recomendado 44px) — pendiente de decisión del propietario, no cambiado unilateralmente.
-2. Solo pedir aprobación para el merge a `main` (producción) cuando el propietario lo indique explícitamente.
+**Pendiente**: solo pedir aprobación para el merge a `main` (producción) cuando el propietario lo indique explícitamente.
 
 ## 30. Traspaso a otro agente de IA
 
