@@ -323,7 +323,8 @@ h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.1; }
 .timer-actions button { color: #fff; background: var(--accent); border-color: transparent; }
 .study-timer[data-overtime="true"] .timer-display { color: #d92d20; }
 .section-completion { display: flex; justify-content: flex-end; padding-block: .5rem 1.5rem; }
-.done-toggle { flex: 0 0 auto; display: inline-grid; place-items: center; width: 1.8rem; height: 1.8rem; padding: 0; border: 1.5px solid var(--toggle-border); border-radius: 999px; background: var(--surface); color: transparent; box-shadow: 0 1px 3px rgb(0 0 0 / .3); cursor: pointer; transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease; }
+.done-toggle { flex: 0 0 auto; display: inline-grid; place-items: center; width: 2.75rem; height: 2.75rem; padding: 0; border: 2px solid var(--toggle-border); border-radius: 999px; background: var(--surface); color: transparent; box-shadow: 0 1px 3px rgb(0 0 0 / .3); cursor: pointer; transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease; }
+.done-toggle svg { width: 1.15rem; height: 1.15rem; }
 .done-toggle:hover { border-color: var(--accent); color: var(--accent); }
 .done-toggle.on { border-color: var(--accent); background: var(--accent); color: #fff; box-shadow: 0 1px 8px color-mix(in srgb, var(--accent) 50%, transparent); }
 .module-pagination { display: flex; justify-content: space-between; gap: 1rem; padding-block: 3rem; font-size: .9rem; }
