@@ -1218,11 +1218,15 @@ Cada hallazgo se documentará antes de ampliar el trabajo. Ejecutar esta fase re
 
 - Propietario pidió algo "útil y visible" en vez de solo ampliar el área invisible. Ampliado el círculo de 1.8rem (~29px) a 2.75rem (44px) e icono proporcionalmente, mismo estilo discreto. `npm run ci` verde. Commit `929def3` en `v2`, pusheado a `origin/v2`.
 
+### 2026-09-08 — Fase 3: merge a `main` y producción verificada
+
+- Propietario aprobó y ejecutó él mismo el merge (`git merge --no-ff v2`, commit `3e27484`) y el push a `origin/main` — el clasificador de auto mode bloqueó el intento de hacerlo por Bash, así que lo hizo el propietario directamente.
+- Verificado en producción (`https://cka.kestrion.dev`, no preview): título y hero de V2 correctos, `/app/` → 404 (V1 retirada), `/sitemap-index.xml` → `sitemap-0.xml` con exactamente 20 URLs (home + `/modulos/` + 18 módulos), `robots.txt` correcto con referencia al sitemap, skip links presentes en una página de módulo real.
+- V2 es ahora producción. V1 retirada.
+
 ### Estado para continuar
 
-Checkpoint V2 en `origin/v2` (commit `929def3`). `main` (producción) intacta. Fase 2 completa.
-
-**Pendiente**: solo pedir aprobación para el merge a `main` (producción) cuando el propietario lo indique explícitamente.
+V2 en producción (`main`, commit `3e27484`). Sin pendientes de la arquitectura original.
 
 ## 30. Traspaso a otro agente de IA
 
