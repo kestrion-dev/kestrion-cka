@@ -1,0 +1,216 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const modules = (await getCollection('modules', ({ data }) => data.access === 'free'))
+  .sort((a, b) => a.data.order - b.data.order);
+const first = modules[0];
+const featuredSlugs = ['entorno-laboratorio-kubectl', 'arquitectura-kubernetes', 'workloads-deployments-daemonsets-statefulsets', 'services-kube-proxy', 'storage-pv-pvc-storageclass', 'troubleshooting-cluster-control-plane'];
+const featured = featuredSlugs
+  .map((slug) => modules.find((m) => m.data.slug === slug))
+  .filter((m): m is NonNullable<typeof m> => Boolean(m));
+---
+
+<BaseLayout
+  title="Curso CKA en español | Kestrion"
+  description="Curso práctico y gratuito para preparar la certificación Certified Kubernetes Administrator (CKA): quiz, laboratorios cronometrados y progreso local, sin registro."
+>
+  <section class="hero-section page-wide">
+    <div class="hero-grid">
+      <div class="hero-copy">
+        <p class="eyebrow">Preparación CKA de Kubernetes en español · Gratis, sin registro</p>
+        <h1>Aprueba el CKA de Kubernetes entrenando, no memorizando</h1>
+        <p class="hero-lead">
+          El examen CKA es 100&nbsp;% práctico y contra el reloj. Kestrion te prepara igual: quiz con
+          respuestas ocultas, laboratorios cronometrados con soluciones tapadas, y progreso que se
+          guarda solo en tu navegador. Sin registro, directamente en la página de cada módulo.
+        </p>
+        <div class="cta-row">
+          {first && <a class="cta primary" href={`/modulos/${first.data.slug}/`}>Empezar a estudiar gratis</a>}
+          <a class="cta ghost" href="#como-funciona">Cómo funciona</a>
+        </div>
+        <div class="hero-badges">
+          <span>Sin registro</span>
+          <span>100&nbsp;% en español</span>
+          <span>Progreso solo en tu navegador</span>
+          <span>{modules.length} módulos</span>
+        </div>
+      </div>
+
+      <div class="mock" aria-hidden="true">
+        <div class="mock-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="mock-url">cka.kestrion.dev/modulos/scheduling-avanzado…</span>
+        </div>
+        <div class="mock-body">
+          <div class="mock-progress">
+            <span>M09 · Scheduling avanzado</span>
+            <span class="meter"><span class="meter-fill" style="width:78%"></span></span>
+            <span>7/9</span>
+          </div>
+          <div class="mock-quiz">
+            <span class="q-tag">Checkpoint · Pregunta 3</span>
+            <p class="q-text">¿Qué efecto de un taint expulsa a los pods que ya están corriendo en el nodo?</p>
+            <span class="q-btn">Mostrar respuesta</span>
+          </div>
+          <div class="mock-code"><span class="c">kubectl</span> taint node worker1 <span class="f">gpu=true:NoSchedule</span></div>
+          <div class="mock-timer">
+            <span>⏱ Laboratorio cronometrado · objetivo ≤ 15 min</span>
+            <span class="t-clock">07:42</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="stats-bar">
+    <div class="page-wide stats-grid">
+      <div class="stat"><b>{modules.length}</b><span>módulos completos</span></div>
+      <div class="stat"><b>85</b><span>preguntas de autoevaluación</span></div>
+      <div class="stat"><b>17</b><span>laboratorios cronometrados</span></div>
+      <div class="stat"><b>550+</b><span>comandos listos para copiar</span></div>
+    </div>
+  </div>
+
+  <section class="ai-band" id="ia" aria-labelledby="ia-titulo">
+    <div class="page-wide ai-grid">
+      <div class="ai-copy">
+        <p class="eyebrow">La razón que no existía hace cinco años</p>
+        <h2 id="ia-titulo">Kubernetes ya es la plataforma por defecto de la IA</h2>
+        <p class="ai-lede">Kubernetes nació para orquestar contenedores. Hoy la industria lo usa también para entrenar y servir modelos de IA a escala, y no es una impresión: es lo que dice la propia organización que lo gobierna.</p>
+        <blockquote class="pull-quote">
+          "Kubernetes ha demostrado ser la plataforma más efectiva y fiable para desplegar sistemas modernos de nivel de producción a escala — incluida la IA."
+          <cite>— Hilary Carter, Linux Foundation Research, sobre el CNCF Annual Survey 2025</cite>
+        </blockquote>
+        <p>El soporte técnico ya no es incidental. Kubernetes 1.34 llevó a General Availability el <em>Dynamic Resource Allocation</em>, que trata GPUs y aceleradores como ciudadanos de primera clase del scheduler, no como un recurso genérico contado a bulto. NVIDIA donó su driver de DRA a la CNCF y su <em>KAI Scheduler</em> entró como proyecto Sandbox: el mayor fabricante de GPUs del mundo construye directamente sobre Kubernetes, no al lado. Alrededor de esa base creció un ecosistema entero nativo de Kubernetes para IA: Kueue para colas y cuotas, Volcano y KAI Scheduler para el <em>gang scheduling</em> del entrenamiento distribuido, KServe y vLLM para servir modelos en producción.</p>
+        <p>Esto no es un capítulo aparte del CKA: es la razón por la que las habilidades que certifica — administrar clústeres, programar cargas, gestionar recursos — pesan hoy más que nunca. Quien sabe administrar Kubernetes sabe administrar la infraestructura sobre la que corre la IA.</p>
+      </div>
+      <div class="ai-proof">
+        <p class="ai-proof-label">Lo dice la propia industria, no nosotros</p>
+        <div class="ai-proof-stat">
+          <b>82%</b>
+          <span>de las organizaciones que usan contenedores ya corren Kubernetes en producción</span>
+        </div>
+        <div class="ai-proof-stat">
+          <b>66%</b>
+          <span>de las organizaciones con IA generativa despliegan su inferencia, total o parcialmente, sobre Kubernetes</span>
+        </div>
+        <p class="ai-proof-source">Fuente: CNCF Annual Survey 2025</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section page-wide" id="por-que" aria-labelledby="por-que-titulo">
+    <h2 class="section-title" id="por-que-titulo">¿Y por qué el CKA?</h2>
+    <p class="section-sub">Si acabas de llegar y no sabes qué es esto: Kubernetes es la plataforma sobre la que hoy corre el software moderno, y el CKA (Certified Kubernetes Administrator) es la certificación que demuestra que sabes administrarla.</p>
+    <div class="grid-3">
+      <div class="card"><span class="ico">☸️</span><h3>Kubernetes es el estándar</h3><p>Las aplicaciones modernas se ejecutan en contenedores, y Kubernetes es el sistema que los orquesta a escala: desde microservicios hasta el entrenamiento y despliegue de modelos de IA. La inmensa mayoría de las organizaciones ya lo usan o lo están evaluando.</p></div>
+      <div class="card"><span class="ico">🚪</span><h3>Abre puertas reales</h3><p>El CKA es una de las certificaciones más demandadas del mundo cloud: es un requisito habitual en ofertas de DevOps, SRE y platform engineering. Y a diferencia de un test de memorizar, es 100&nbsp;% práctico — se resuelve en una terminal real.</p></div>
+      <div class="card"><span class="ico">🧭</span><h3>El punto de entrada serio</h3><p>Existen varias certificaciones de Kubernetes, pero el CKA es la que marca la diferencia en un CV: certifica que administras clústeres de verdad, no que conoces la teoría. Desde ahí puedes especializarte en seguridad con la CKS.</p></div>
+    </div>
+    <div class="cert-path" aria-label="Ruta de certificaciones de Kubernetes">
+      <div class="cert">
+        <span class="cert-code">KCNA</span>
+        <span class="cert-name">Kubernetes and Cloud Native Associate</span>
+        <p class="cert-desc">Nivel inicial: conceptos y ecosistema. Examen teórico.</p>
+      </div>
+      <span class="cert-arrow" aria-hidden="true">→</span>
+      <div class="cert here">
+        <span class="cert-tag">Estás aquí</span>
+        <span class="cert-code">CKA</span>
+        <span class="cert-name">Certified Kubernetes Administrator</span>
+        <p class="cert-desc">Administración real de clústeres. Examen práctico en terminal.</p>
+      </div>
+      <span class="cert-arrow" aria-hidden="true">→</span>
+      <div class="cert">
+        <span class="cert-code">CKS</span>
+        <span class="cert-name">Certified Kubernetes Security Specialist</span>
+        <p class="cert-desc">Especialización en seguridad. Requiere el CKA vigente.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section page-wide" aria-labelledby="funciones-titulo">
+    <h2 class="section-title" id="funciones-titulo">Estudiar leyendo no aprueba el CKA. Esto sí.</h2>
+    <p class="section-sub">Cada función existe por una razón: el examen son entre 15 y 20 tareas reales en terminal, en 2 horas.</p>
+    <div class="grid-3">
+      <div class="card"><span class="ico">🎓</span><h3>Quiz con respuestas ocultas</h3><p>Los checkpoints de cada módulo son tarjetas de autoevaluación: responde primero, comprueba después.</p></div>
+      <div class="card"><span class="ico">⏱️</span><h3>Laboratorios cronometrados</h3><p>Cronómetro integrado con el objetivo de tiempo de cada laboratorio. Si te pasas, lo ves en rojo — como en el examen.</p></div>
+      <div class="card"><span class="ico">🔒</span><h3>Soluciones ocultas</h3><p>La solución de referencia queda oculta hasta que decides mirarla. Nada de spoilers accidentales.</p></div>
+      <div class="card"><span class="ico">📈</span><h3>Progreso automático</h3><p>Marca secciones estudiadas y sigue por donde lo dejaste. Todo se guarda en tu navegador: sin cuentas, sin emails.</p></div>
+      <div class="card"><span class="ico">⌨️</span><h3>Comandos listos para copiar</h3><p>Cada bloque de kubectl y YAML con resaltado de sintaxis y botón de copiar. Del contenido a tu terminal en un clic.</p></div>
+      <div class="card"><span class="ico">🌙</span><h3>Hecho para estudiar</h3><p>Tema claro y oscuro, búsqueda global instantánea, índice por secciones y enlaces directos a cualquier apartado.</p></div>
+    </div>
+  </section>
+
+  <section class="section page-wide" id="como-funciona" aria-labelledby="como-titulo">
+    <h2 class="section-title" id="como-titulo">Cómo funciona</h2>
+    <p class="section-sub">El mismo ciclo en cada módulo, del primero al último.</p>
+    <div class="steps">
+      <div class="step"><h3>Estudia el módulo</h3><p>Teoría al grano y comandos reales, con los trucos de velocidad que marcan la diferencia en el examen.</p></div>
+      <div class="step"><h3>Ponte a prueba</h3><p>Responde el checkpoint sin mirar. Solo entonces revela la respuesta esperada y compárala con la tuya.</p></div>
+      <div class="step"><h3>Cronometra el laboratorio</h3><p>Arranca el cronómetro y resuelve el laboratorio en tu propio clúster antes de que el tiempo objetivo se agote.</p></div>
+    </div>
+  </section>
+
+  <section class="section page-wide" aria-labelledby="modulos-destacados">
+    <h2 class="section-title" id="modulos-destacados">Módulos disponibles</h2>
+    <p class="section-sub">Temario completo del examen oficial: Cluster Architecture, Workloads &amp; Scheduling, Services &amp; Networking, Storage y Troubleshooting.</p>
+    <ul class="module-grid">
+      {featured.map(({ data }) => (
+        <li>
+          <a href={`/modulos/${data.slug}/`}>
+            <span>{data.code}</span>
+            <strong>{data.title}</strong>
+            <p>{data.description}</p>
+          </a>
+        </li>
+      ))}
+    </ul>
+    <p class="modules-more"><a class="cta ghost" href="/modulos/">Ver los {modules.length} módulos completos →</a></p>
+  </section>
+
+  <section class="section page-wide" id="faq" aria-labelledby="faq-titulo">
+    <h2 class="section-title" id="faq-titulo">Preguntas frecuentes</h2>
+    <div class="faq-list">
+      <details>
+        <summary>¿Es gratis de verdad?</summary>
+        <div class="a">Sí. El curso completo y todas las funciones de estudio son gratuitas. Si en el futuro se añade material premium, lo gratuito seguirá siéndolo.</div>
+      </details>
+      <details>
+        <summary>¿Necesito registrarme?</summary>
+        <div class="a">No. No hay cuentas ni emails: tu progreso se guarda en el almacenamiento local de tu navegador. Entras y estudias.</div>
+      </details>
+      <details>
+        <summary>¿Necesito un clúster para practicar?</summary>
+        <div class="a">Para los laboratorios, sí — el módulo <a href="/modulos/entorno-laboratorio-kubectl/">Entorno de laboratorio y kubectl</a> te guía para montar tu entorno de práctica paso a paso. Es la misma filosofía del examen: todo se aprende ejecutando.</div>
+      </details>
+      <details>
+        <summary>¿Está actualizado con el examen actual?</summary>
+        <div class="a">El temario sigue los dominios oficiales del examen CKA, verificado para Kubernetes v1.35, con cobertura completa de los cinco dominios: Cluster Architecture, Workloads &amp; Scheduling, Services &amp; Networking, Storage y Troubleshooting.</div>
+      </details>
+      <details>
+        <summary>¿Quién está detrás de Kestrion?</summary>
+        <div class="a">Kestrion es un proyecto educativo independiente. No está afiliado a The Linux Foundation ni a la CNCF. ¿Dudas o sugerencias? Escríbenos: <a href="#" class="obf-email" data-user="contacto" data-domain="kestrion.dev">(activa JavaScript para ver el email)</a>.</div>
+      </details>
+    </div>
+  </section>
+
+  <section class="page-wide" style="padding-block: 1rem 3rem;">
+    <div class="final-cta">
+      <h2>Tu examen es contra el reloj. Tu preparación también debería serlo.</h2>
+      {first && <p>Empieza por el módulo {first.data.code} — en 10 minutos estarás generando YAML más rápido de lo que creías posible.</p>}
+      {first && <a class="cta primary" href={`/modulos/${first.data.slug}/`}>Empezar a estudiar gratis</a>}
+    </div>
+  </section>
+
+  <script>
+    for (const link of document.querySelectorAll<HTMLAnchorElement>('.obf-email')) {
+      const user = link.dataset.user;
+      const domain = link.dataset.domain;
+      if (!user || !domain) continue;
+      link.textContent = `${user}@${domain}`;
+      link.href = `mailto:${user}@${domain}`;
+    }
+  </script>
+</BaseLayout>

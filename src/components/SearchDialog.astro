@@ -1,0 +1,71 @@
+<button class="icon-button" type="button" data-search-open>Buscar</button>
+
+<dialog class="search-dialog" data-search-dialog>
+  <form method="dialog" class="search-heading">
+    <strong>Buscar en el curso</strong>
+    <button class="icon-button" value="cancel" aria-label="Cerrar búsqueda">Cerrar</button>
+  </form>
+  <label for="course-search">Título, tema o comando</label>
+  <input id="course-search" type="search" autocomplete="off" data-search-input />
+  <p class="search-status" data-search-status aria-live="polite">Escribe para buscar.</p>
+  <ol class="search-results" data-search-results></ol>
+</dialog>
+
+<script>
+  interface SearchEntry {
+    code: string;
+    title: string;
+    description: string;
+    slug: string;
+    text: string;
+  }
+
+  const open = document.querySelector<HTMLButtonElement>('[data-search-open]');
+  const dialog = document.querySelector<HTMLDialogElement>('[data-search-dialog]');
+  const input = dialog?.querySelector<HTMLInputElement>('[data-search-input]');
+  const status = dialog?.querySelector<HTMLElement>('[data-search-status]');
+  const results = dialog?.querySelector<HTMLOListElement>('[data-search-results]');
+  let index: SearchEntry[] | undefined;
+
+  const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const render = () => {
+    if (!input || !status || !results || !index) return;
+    results.replaceChildren();
+    const query = normalize(input.value.trim());
+    if (!query) {
+      status.textContent = 'Escribe para buscar.';
+      return;
+    }
+    const matches = index.filter((entry) => normalize(`${entry.code} ${entry.title} ${entry.description} ${entry.text}`).includes(query)).slice(0, 10);
+    status.textContent = matches.length === 1 ? '1 resultado.' : `${matches.length} resultados.`;
+    for (const entry of matches) {
+      const item = document.createElement('li');
+      const link = document.createElement('a');
+      const title = document.createElement('strong');
+      const description = document.createElement('span');
+      link.href = `/modulos/${entry.slug}/`;
+      title.textContent = `${entry.code} · ${entry.title}`;
+      description.textContent = entry.description;
+      link.append(title, description);
+      item.append(link);
+      results.append(item);
+    }
+  };
+
+  open?.addEventListener('click', async () => {
+    dialog?.showModal();
+    input?.focus();
+    if (index) return;
+    if (status) status.textContent = 'Cargando índice…';
+    try {
+      const response = await fetch('/search-index.json');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      index = await response.json() as SearchEntry[];
+      if (status) status.textContent = 'Escribe para buscar.';
+      render();
+    } catch {
+      if (status) status.textContent = 'No se pudo cargar la búsqueda.';
+    }
+  });
+  input?.addEventListener('input', render);
+</script>

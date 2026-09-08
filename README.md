@@ -1,40 +1,41 @@
-# Kestrion — Preparación CKA en español
+# Kestrion CKA
 
-Web de estudio interactiva y gratuita para el examen **CKA (Certified Kubernetes Administrator)**, en español.
+Web estática e interactiva en español para preparar el examen Certified Kubernetes Administrator.
 
-**➡️ Estudia en [cka.kestrion.dev](https://cka.kestrion.dev)** — sin registro, directamente en el navegador.
+## Arquitectura
 
-## Por qué existe
+La aplicación usa Astro en modo SSG. Cada módulo se genera como HTML completo en `/modulos/<slug>/` y añade JavaScript únicamente para funciones interactivas aisladas.
 
-El CKA es un examen 100 % práctico y contra el reloj. Leer PDFs no entrena eso. Kestrion convierte el material de estudio en una herramienta de entrenamiento:
-
-- 🎓 **Quiz con respuestas ocultas** — los checkpoints de cada módulo son tarjetas de autoevaluación
-- ⏱️ **Laboratorios cronometrados** — con el objetivo de tiempo de cada lab, en rojo si te pasas
-- 🔒 **Soluciones tapadas** — la solución de referencia queda borrosa hasta que decidas mirarla
-- 📈 **Progreso automático** — en tu navegador (localStorage), sin cuentas ni emails
-- ⌨️ **Comandos listos** — resaltado de sintaxis y botón de copiar en cada bloque
-
-## Estructura
-
+```text
+src/content/modulos/       Fuente Markdown validada
+src/pages/                 Landing, catálogo y páginas de módulo
+src/components/            Componentes interactivos Astro
+src/lib/                   Lógica TypeScript compartida
+scripts/                   Validación de contenido
+tests/                     Pruebas automatizadas
 ```
-landing/          Página de inicio (cka.kestrion.dev)
-cka-study-web/    La app de estudio (cka.kestrion.dev/app)
-modulos/          Contenido del curso: un TXT por módulo (M00, M01, ...)
-build.sh          Ensambla dist/ para el despliegue (Cloudflare Pages)
-```
-
-La app es JavaScript puro, sin dependencias ni framework: parsea los TXT en el navegador. Añadir un módulo = añadir `modulos/M0X-tema.txt`.
 
 ## Desarrollo local
 
+Requiere Node.js 22.23.2.
+
 ```bash
-bash cka-study-web/start.sh    # servidor local + abre el navegador
-bash build.sh                  # ensambla dist/ como en producción
+npm ci
+npm run dev
 ```
+
+El preview que reproduce Cloudflare Workers se inicia con `npm run preview` después del build.
+
+Validación completa:
+
+```bash
+npm run ci
+```
+
+El build estático se genera en `dist/` y `wrangler.jsonc` permite servirlo mediante Cloudflare Workers Static Assets.
 
 ## Licencia
 
-- **Código** (app, landing, scripts): [MIT](LICENSE)
-- **Contenido del curso** (`modulos/`): © 2026 Kestrion, todos los derechos reservados — uso personal de estudio permitido; republicación y uso comercial, no. Ver [modulos/LICENSE.txt](modulos/LICENSE.txt).
+El código está bajo MIT. El contenido del curso pertenece a Kestrion y conserva una licencia separada; consulta [LICENSE](LICENSE).
 
 Kubernetes® y CKA® son marcas registradas de The Linux Foundation. Kestrion es un proyecto educativo independiente, no afiliado a The Linux Foundation ni a la CNCF.

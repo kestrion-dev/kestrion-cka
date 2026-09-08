@@ -1,0 +1,109 @@
+---
+import { getCollection, render } from 'astro:content';
+import SectionChecklist from '../../components/SectionChecklist.astro';
+import StudyInteractions from '../../components/StudyInteractions.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export async function getStaticPaths() {
+  const modules = await getCollection('modules', ({ data }) => data.access === 'free');
+  return modules.map((entry) => ({ params: { slug: entry.data.slug }, props: { entry } }));
+}
+
+const { entry } = Astro.props;
+const modules = (await getCollection('modules', ({ data }) => data.access === 'free'))
+  .sort((a, b) => a.data.order - b.data.order);
+const index = modules.findIndex(({ data }) => data.slug === entry.data.slug);
+const previous = modules[index - 1];
+const next = modules[index + 1];
+const { Content, headings } = await render(entry);
+const sections = headings.filter(({ depth }) => depth === 2);
+const sectionCount = sections.length;
+
+const pills: { key: string; value: string }[] = [
+  { key: 'Secciones', value: String(sectionCount) },
+  ...(entry.data.examWeight !== undefined ? [{ key: 'Peso examen', value: `${entry.data.examWeight}%` }] : []),
+  ...(entry.data.estimatedMinutes !== undefined ? [{ key: 'Duración', value: `~${entry.data.estimatedMinutes} min` }] : []),
+  ...(entry.data.environment ? [{ key: 'Entorno', value: entry.data.environment }] : []),
+  ...(entry.data.type ? [{ key: 'Tipo', value: entry.data.type }] : []),
+  ...(entry.data.prerequisites?.length
+    ? [{ key: 'Prerrequisitos', value: entry.data.prerequisites.map((slug) => modules.find((m) => m.data.slug === slug)?.data.code ?? slug).join(', ') }]
+    : []),
+  { key: 'Actualizado', value: entry.data.updated.toLocaleDateString('es') },
+];
+---
+
+<BaseLayout title={`${entry.data.title} | Kestrion CKA`} description={entry.data.description}>
+  <div class="docs-shell">
+    <aside class="sidebar" aria-label="Todos los módulos" data-sidebar>
+      <p class="sidebar-title">Módulos</p>
+      <ol class="module-nav">
+        {modules.map(({ data }) => {
+          const active = data.slug === entry.data.slug;
+          return (
+            <li class="nav-module" data-active={active ? 'true' : undefined}>
+              <a class="nav-item" href={`/modulos/${data.slug}/`} aria-current={active ? 'page' : undefined} data-nav-module={data.slug}>
+                <span class="nav-top">
+                  <span class="nav-code">{data.code}</span>
+                  <span class="nav-count" data-nav-count data-current={active ? 'true' : undefined}>&nbsp;</span>
+                </span>
+                <span class="nav-title">{data.title}</span>
+                <span class="meter"><span class="meter-fill" data-nav-meter data-current={active ? 'true' : undefined}></span></span>
+              </a>
+              {active && sectionCount > 0 && (
+                <ol class="toc">
+                  {sections.map((heading) => (
+                    <li>
+                      <a href={`#${heading.slug}`} class="toc-link" data-toc-link data-section-id={heading.slug}>
+                        <span class="toc-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.8 9.6 18 19.5 6.5"/></svg></span>
+                        <span class="toc-text">{heading.text}</span>
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </aside>
+    <div class="scrim" data-sidebar-scrim></div>
+
+    <div class="docs-main">
+      <div class="docs-main-inner">
+        <nav class="breadcrumbs" aria-label="Migas de pan">
+          <button class="nav-toggle icon-button" type="button" data-sidebar-toggle aria-label="Mostrar índice de módulos">☰</button>
+          <a href="/">Inicio</a><span aria-hidden="true">/</span><a href="/modulos/">Módulos</a><span aria-hidden="true">/</span><span>{entry.data.title}</span>
+        </nav>
+        <article class="module-content">
+          <header class="module-hero">
+            <div class="hero-row">
+              <span class="module-chip">{entry.data.code}</span>
+              <div class="hero-meter">
+                <span class="meter"><span class="meter-fill" data-hero-meter-fill></span></span>
+                <span class="hero-meter-label" data-hero-meter-label>0/{sectionCount}</span>
+              </div>
+            </div>
+            <h1>{entry.data.title}</h1>
+            <p>{entry.data.description}</p>
+            <div class="module-meta">
+              {pills.map((pill) => (
+                <span class="pill"><span class="pill-key">{pill.key}</span>{pill.value}</span>
+              ))}
+            </div>
+          </header>
+          <section class="module-progress" data-module-progress aria-label="Progreso del módulo">
+            <p><strong>Progreso</strong> <span data-progress-label>0 de {sectionCount} secciones</span></p>
+            <progress value="0" max={sectionCount || 1} data-progress-meter></progress>
+          </section>
+          <Content />
+          <SectionChecklist />
+          <StudyInteractions />
+        </article>
+        <nav class="module-pagination" aria-label="Módulos anterior y siguiente">
+          {previous ? <a rel="prev" href={`/modulos/${previous.data.slug}/`}>← {previous.data.title}</a> : <span />}
+          {next && <a rel="next" href={`/modulos/${next.data.slug}/`}>{next.data.title} →</a>}
+        </nav>
+      </div>
+    </div>
+  </div>
+</BaseLayout>

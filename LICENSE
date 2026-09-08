@@ -3,12 +3,13 @@ Licencia de este repositorio / License of this repository
 
 Este proyecto usa licencia dual:
 
-1. CÓDIGO (cka-study-web/, landing/, build.sh y demás ficheros de la
+1. CÓDIGO (src/, scripts/, tests/, build.sh y demás ficheros de la
    aplicación): licencia MIT (ver abajo). Puedes usarlo, modificarlo y
    redistribuirlo libremente conservando el aviso de copyright.
 
-2. CONTENIDO DEL CURSO (carpeta modulos/ y todo el material de estudio):
-   © 2026 Kestrion. Todos los derechos reservados. Ver modulos/LICENSE.txt.
+2. CONTENIDO DEL CURSO (src/content/modulos/, módulos Markdown entregados
+   para su incorporación y todo el material de estudio):
+   © 2026 Kestrion. Todos los derechos reservados.
    El contenido NO está cubierto por la licencia MIT: no puede reproducirse,
    redistribuirse ni usarse comercialmente sin autorización escrita.
    Contacto: contacto@kestrion.dev

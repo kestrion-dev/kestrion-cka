@@ -1,0 +1,29 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const modules = (await getCollection('modules', ({ data }) => data.access === 'free'))
+  .sort((a, b) => a.data.order - b.data.order);
+---
+
+<BaseLayout
+  title="Módulos del curso CKA | Kestrion"
+  description="Catálogo gratuito de módulos prácticos para preparar la certificación CKA."
+>
+  <div class="page-container">
+    <header class="page-heading">
+      <p class="eyebrow">Curso CKA</p>
+      <h1>Módulos</h1>
+    </header>
+    <ol class="module-list">
+      {modules.map(({ data }) => (
+        <li>
+          <a href={`/modulos/${data.slug}/`}>
+            <span>{data.code}</span>
+            <div><strong>{data.title}</strong><p>{data.description}</p></div>
+          </a>
+        </li>
+      ))}
+    </ol>
+  </div>
+</BaseLayout>

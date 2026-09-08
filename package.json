@@ -1,0 +1,32 @@
+{
+  "name": "kestrion-cka-v2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0",
+    "npm": ">=9.6.5"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "validate": "node scripts/validate-content.mjs",
+    "build": "npm run validate && astro build --force",
+    "check": "astro check",
+    "check:build": "node scripts/validate-build.mjs",
+    "check:cloudflare": "wrangler deploy --dry-run",
+    "ci": "npm run check && npm test && npm run build && npm run check:build && npm run check:cloudflare",
+    "preview": "wrangler dev",
+    "preview:astro": "astro preview",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@astrojs/sitemap": "3.7.4",
+    "astro": "7.3.1"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "@astrojs/markdown-remark": "7.3.0",
+    "typescript": "6.0.3",
+    "wrangler": "4.129.1"
+  }
+}
