@@ -1,0 +1,108 @@
+<script>
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy-code]')) {
+    button.addEventListener('click', async () => {
+      const code = button.closest('.code-block')?.querySelector('code')?.textContent;
+      if (!code) return;
+      try {
+        await navigator.clipboard.writeText(code);
+        button.textContent = 'Copiado';
+        window.setTimeout(() => { button.textContent = 'Copiar'; }, 1600);
+      } catch {
+        button.textContent = 'No se pudo copiar';
+      }
+    });
+  }
+
+  for (const timer of document.querySelectorAll<HTMLElement>('[data-study-timer]')) {
+    const display = timer.querySelector<HTMLOutputElement>('.timer-display');
+    const toggle = timer.querySelector<HTMLButtonElement>('[data-timer-toggle]');
+    const reset = timer.querySelector<HTMLButtonElement>('[data-timer-reset]');
+    const target = Number(timer.dataset.targetSeconds ?? 0);
+    if (!display || !toggle || !reset || !target) continue;
+
+    let remaining = target;
+    let interval: number | undefined;
+    const render = () => {
+      const elapsed = remaining < 0;
+      const absolute = Math.abs(remaining);
+      const minutes = Math.floor(absolute / 60);
+      const seconds = absolute % 60;
+      display.value = `${elapsed ? '+' : ''}${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      timer.dataset.overtime = String(elapsed);
+    };
+    const stop = () => {
+      if (interval !== undefined) window.clearInterval(interval);
+      interval = undefined;
+      toggle.textContent = 'Continuar';
+    };
+
+    toggle.addEventListener('click', () => {
+      if (interval !== undefined) {
+        stop();
+        return;
+      }
+      toggle.textContent = 'Pausar';
+      interval = window.setInterval(() => {
+        remaining -= 1;
+        render();
+      }, 1000);
+    });
+    reset.addEventListener('click', () => {
+      stop();
+      remaining = target;
+      toggle.textContent = 'Iniciar';
+      render();
+    });
+    render();
+  }
+
+  const tocLinks = new Map(
+    [...document.querySelectorAll<HTMLAnchorElement>('[data-toc-link]')]
+      .map((link) => [link.getAttribute('href')?.slice(1), link] as const)
+      .filter((entry): entry is [string, HTMLAnchorElement] => Boolean(entry[0])),
+  );
+  if (tocLinks.size && 'IntersectionObserver' in window) {
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        tocLinks.get(entry.target.id)?.classList.toggle('active', entry.isIntersecting);
+      }
+    }, { rootMargin: '-96px 0px -70% 0px' });
+    for (const id of tocLinks.keys()) {
+      const heading = document.getElementById(id);
+      if (heading) observer.observe(heading);
+    }
+  }
+
+  const sidebarToggle = document.querySelector<HTMLButtonElement>('[data-sidebar-toggle]');
+  const scrim = document.querySelector<HTMLElement>('[data-sidebar-scrim]');
+  if (sidebarToggle) {
+    const close = () => { document.body.dataset.sidebarOpen = 'false'; };
+    sidebarToggle.addEventListener('click', () => {
+      document.body.dataset.sidebarOpen = document.body.dataset.sidebarOpen === 'true' ? 'false' : 'true';
+    });
+    scrim?.addEventListener('click', close);
+    document.querySelector('[data-sidebar]')?.addEventListener('click', (event) => {
+      if ((event.target as HTMLElement).closest('a')) close();
+    });
+  }
+
+  const manifestRequest = fetch('/modules-manifest.json').then((response) => (response.ok ? response.json() : []));
+  import('../lib/progress').then(async ({ isCompleted }) => {
+    let manifest: { slug: string; sectionIds: string[] }[];
+    try {
+      manifest = await manifestRequest;
+    } catch {
+      return;
+    }
+    for (const module of manifest) {
+      const item = document.querySelector<HTMLAnchorElement>(`[data-nav-module="${module.slug}"]`);
+      const count = item?.querySelector<HTMLElement>('[data-nav-count]:not([data-current="true"])');
+      const fill = item?.querySelector<HTMLElement>('[data-nav-meter]:not([data-current="true"])');
+      if (!count || !fill || !module.sectionIds.length) continue;
+      const done = module.sectionIds.filter((id) => isCompleted(`/modulos/${module.slug}/:${id}`)).length;
+      count.textContent = `${done}/${module.sectionIds.length}`;
+      count.classList.toggle('complete', done === module.sectionIds.length);
+      fill.style.width = `${(done / module.sectionIds.length) * 100}%`;
+    }
+  });
+</script>

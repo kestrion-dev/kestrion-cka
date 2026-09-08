@@ -1,0 +1,58 @@
+<script>
+  import { isCompleted, setCompleted } from '../lib/progress';
+
+  const updateProgress = () => {
+    const toggles = [...document.querySelectorAll<HTMLElement>('[data-section-checklist]')];
+    const completed = toggles.filter((item) => item.dataset.completed === 'true').length;
+    const total = toggles.length;
+
+    for (const summary of document.querySelectorAll<HTMLElement>('[data-module-progress]')) {
+      const meter = summary.querySelector<HTMLProgressElement>('[data-progress-meter]');
+      const label = summary.querySelector<HTMLElement>('[data-progress-label]');
+      if (!meter || !label) continue;
+      meter.max = Math.max(total, 1);
+      meter.value = completed;
+      label.textContent = `${completed} de ${total} secciones`;
+    }
+
+    const heroFill = document.querySelector<HTMLElement>('[data-hero-meter-fill]');
+    const heroLabel = document.querySelector<HTMLElement>('[data-hero-meter-label]');
+    if (heroFill) heroFill.style.width = `${total ? (completed / total) * 100 : 0}%`;
+    if (heroLabel) heroLabel.textContent = `${completed}/${total}`;
+
+    const navMeter = document.querySelector<HTMLElement>(`[data-nav-meter][data-current="true"]`);
+    const navCount = document.querySelector<HTMLElement>(`[data-nav-count][data-current="true"]`);
+    if (navMeter) navMeter.style.width = `${total ? (completed / total) * 100 : 0}%`;
+    if (navCount) {
+      navCount.textContent = `${completed}/${total}`;
+      navCount.classList.toggle('complete', total > 0 && completed === total);
+    }
+  };
+
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-section-checklist]')) {
+    const sectionId = button.dataset.id;
+    if (!sectionId) continue;
+    const id = `${location.pathname}:${sectionId}`;
+
+    const tocLink = document.querySelector<HTMLElement>(`[data-toc-link][data-section-id="${sectionId}"]`);
+
+    const render = (completed: boolean) => {
+      button.dataset.completed = String(completed);
+      button.classList.toggle('on', completed);
+      button.setAttribute('aria-pressed', String(completed));
+      const label = completed ? 'Estudiada — clic para desmarcar' : 'Marcar como estudiada';
+      button.setAttribute('aria-label', label);
+      button.title = label;
+      tocLink?.classList.toggle('done', completed);
+    };
+
+    render(isCompleted(id));
+    button.addEventListener('click', () => {
+      const completed = button.dataset.completed !== 'true';
+      setCompleted(id, completed);
+      render(completed);
+      updateProgress();
+    });
+  }
+  updateProgress();
+</script>
