@@ -105,7 +105,7 @@ Las tres siguen el mismo principio: Kubernetes define un contrato, una interfaz,
 
 #### CNI, Container Network Interface
 
-Contrato para asignar red a los pods, IP, rutas, reglas de firewall para NetworkPolicy. Implementaciones: Calico, la tuya, Flannel, Cilium, Weave. Sin un CNI instalado, los nodos quedan NotReady indefinidamente, algo que ya viste en M03.
+Contrato para asignar red a los pods, IP, rutas, reglas de firewall para NetworkPolicy. Implementaciones: Calico, Flannel, Cilium, Weave, entre otras (usa la que hayas instalado en tu laboratorio). Sin un CNI instalado, los nodos quedan NotReady indefinidamente, algo que ya viste en M03.
 
 #### CSI, Container Storage Interface
 
@@ -113,7 +113,7 @@ Contrato para que Kubernetes pida almacenamiento a un backend externo, aprovisio
 
 #### CRI, Container Runtime Interface
 
-Contrato entre kubelet y el runtime que realmente crea y destruye contenedores. Implementaciones: containerd, la tuya, y CRI-O. Docker no implementa CRI de forma nativa desde hace varias versiones; por eso Kubernetes usa containerd directamente.
+Contrato entre kubelet y el runtime que realmente crea y destruye contenedores. Implementaciones: containerd, CRI-O, entre otras (usa la que hayas instalado en tu laboratorio). Docker no implementa CRI de forma nativa desde hace varias versiones; por eso Kubernetes usa containerd directamente.
 
 ## 6. Diagrama ASCII - Operator reconciliation loop
 
