@@ -168,8 +168,10 @@ helm version
 ```
 
 ```text output
-version.BuildInfo{Version:"v3.15.2", GitCommit:"...", GoVersion:"go1.22.4"}
+version.BuildInfo{Version:"v3.x.x", GitCommit:"...", GoVersion:"go1.x"}
 ```
+
+El script instala siempre la última versión estable de Helm 3, así que tu número de versión será distinto al de este ejemplo — es esperado, no un error.
 
 ### 7.2 Helm, crear y entender un chart propio
 
@@ -202,8 +204,8 @@ kubectl get deployments
 NAME            NAMESPACE   REVISION   STATUS     CHART
 mi-app-release  default     1          deployed   mi-app-0.1.0
 
-NAME                     READY   UP-TO-DATE   AVAILABLE
-mi-app-release-mi-app    3/3     3            3
+NAME            READY   UP-TO-DATE   AVAILABLE
+mi-app-release  3/3     3            3
 ```
 
 Actualizar el release, cambiar un value:
@@ -222,12 +224,12 @@ Revertir a la revisión anterior:
 
 ```bash exec
 helm rollback mi-app-release 1
-kubectl get deployment mi-app-release-mi-app
+kubectl get deployment mi-app-release
 ```
 
 ```text output
-NAME                     READY
-mi-app-release-mi-app    3/3
+NAME            READY
+mi-app-release  3/3
 ```
 
 Ver el historial completo:
@@ -465,17 +467,17 @@ NAME             AGE
 mi-nueva-tarea   5s
 ```
 
-Demostración de la ausencia de controller:
+Demostración de la ausencia de controller. Si vienes siguiendo los ejemplos anteriores de este módulo (7.2, 7.4), tu namespace `default` ya tiene pods de `mi-app-release` y de los overlays de Kustomize — eso es normal y no tiene relación con este paso, así que en vez de buscar un namespace vacío, busca algo asociado a `mi-nueva-tarea`:
 
 ```bash exec
-kubectl get pods
+kubectl get pods | grep -i "mi-nueva-tarea\|crontab"
 ```
 
 ```text output
-No resources found in default namespace.
+(sin salida)
 ```
 
-Ningún pod se creó. El objeto CronTab existe en etcd, `kubectl get ct` lo confirma, pero nadie actúa sobre él. Esta es la diferencia central explicada en 5.3 y 5.4.
+Ningún pod se creó para el CronTab. El objeto existe en etcd, `kubectl get ct` lo confirma, pero nadie actúa sobre él. Esta es la diferencia central explicada en 5.3 y 5.4.
 
 ### 7.6 Operator real: cert-manager
 
@@ -563,7 +565,7 @@ CRI:
 
 ```bash exec
 kubectl get nodes -o wide
-crictl info | grep -A2 runtimeName
+sudo crictl info | grep -A2 runtimeName
 ```
 
 ```text output
@@ -574,9 +576,11 @@ CNI:
 
 ```bash exec
 kubectl get pods -n kube-system | grep calico
-ls /etc/cni/net.d/
-kubectl get nodes cka-cp1 -o jsonpath='{.spec.podCIDR}'
+sudo ls /etc/cni/net.d/
+kubectl get pod -n kube-system -l k8s-app=calico-node -o jsonpath='{.items[0].status.podIP}'
 ```
+
+`kubectl get nodes cka-cp1 -o jsonpath='{.spec.podCIDR}'` no devuelve nada en este cluster: el `kubeadm init` de M03 no usó `--pod-network-cidr`, y Calico, tal como se instaló, asigna IPs con su propio IPAM en vez de depender de `spec.podCIDR`. Por eso aquí se verifica el CNI mirando la IP real que recibió un pod, no ese campo.
 
 CSI:
 
@@ -699,7 +703,7 @@ Objetivo: completar en menos de 15 minutos.
 
 Tarea:
 
-1. Agrega el repositorio de Helm de ingress-nginx si no lo tienes agregado.
+1. Agrega el repositorio de Helm `https://kubernetes.github.io/ingress-nginx` con el nombre `ingress-nginx`, si no lo tienes agregado. En el examen real, cualquier repositorio de Helm que haga falta se te da explícitamente en el enunciado de la tarea; no se espera que memorices URLs de terceros.
 2. Instala el chart ingress-nginx en el namespace examen-helm, creando el namespace, con el nombre de release lab-ingress.
 3. Realiza un upgrade del release cambiando el número de réplicas del controller a 2.
 4. Crea una estructura de Kustomize con una base con un Deployment llamado api, imagen nginx:1.25, 1 réplica, y un overlay stage que sube a 3 réplicas.
