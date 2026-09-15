@@ -1231,9 +1231,17 @@ Cada hallazgo se documentará antes de ampliar el trabajo. Ejecutar esta fase re
 - Rollback probado de verdad (no solo teorizado): `git revert --no-commit -m 1 3e27484` contra el `main` real, sin commit ni push, luego `git revert --abort` (nada quedó a medias). Resultado: todo el código/contenido revierte limpio a V1; único conflicto en `ARQUITECTURA-V2.md` (doc de bitácora, no código), por los 2 commits posteriores al merge — resoluble en segundos conservando la versión de HEAD.
 - Build reproducible verificado con clon limpio real: `git clone` del repo en directorio nuevo + `npm ci` + `npm run ci` completos, sin nada heredado del entorno de trabajo habitual. Todo verde.
 
+### 2026-09-09/15 — Cloudflare verificado y correcciones técnicas de M06 al practicar en real
+
+- Sitemap en Search Console corregido: `cka.kestrion.dev/sitemap.xml` (V1, 404) eliminado, sustituido por `sitemap-index.xml` (correcto). Search Console y Cloudflare Web Analytics confirmados operativos por el propietario.
+- Propietario practicó M06 en un lab real y reportó, uno a uno, 6 fallos técnicos genuinos (no de estilo): redacción "la tuya" ambigua en listas de CNI/CRI, versión fija de `helm version` que envejece, `crictl info` y `ls /etc/cni/net.d/` sin `sudo`, nombre de recurso incorrecto tras `helm install` (Helm deduplica el fullname), `spec.podCIDR` vacío porque M03 no fija `--pod-network-cidr`, y URL de repo Helm ausente del enunciado del laboratorio cronometrado (debe darse explícita, como en el examen real). Todos corregidos en `helm-kustomize-crds-operators.md`.
+- Dos falsos positivos descartados tras investigar con el propietario: un error de Kustomize por typo local suyo (`piVersion` en vez de `apiVersion`), y un uso de `-f` en vez de `-k` también typo suyo — ninguno requería cambio en el contenido.
+- Nota abierta, no corregida aún: el mismo patrón de `crictl` sin `sudo` aparece 15+ veces más en otros 4 módulos ya incorporados (`arquitectura-kubernetes`, `troubleshooting-cluster-control-plane`, `kubeadm-etcd-backup-restore-upgrade`, `troubleshooting-nodos-networking`); pendiente de revisión aparte.
+- `npm run ci` verde (Node 22.23.2 tuvo que reinstalarse en `/tmp`, se había perdido entre sesiones). Commit `b3fef8f` en `main`, pusheado.
+
 ### Estado para continuar
 
-V2 en producción (`main`, commit `c5dce77`). Arquitectura completa y verificada: contenido, interfaz, SEO, accesibilidad, rollback y reproducibilidad del build. Único punto que el propietario debe confirmar él mismo (fuera del alcance de este agente): que Cloudflare Web Analytics siga activo en el panel.
+V2 en producción (`main`, commit `b3fef8f`). Arquitectura completa y verificada, Cloudflare confirmado operativo. Pendiente: revisar los usos de `crictl` sin `sudo` en M02, M03, M15 y M16 (ver nota arriba); seguir con la revisión práctica de M06 en curso y del resto de módulos si el propietario encuentra más discrepancias al estudiar.
 
 ## 30. Traspaso a otro agente de IA
 
