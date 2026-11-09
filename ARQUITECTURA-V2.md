@@ -1239,9 +1239,30 @@ Cada hallazgo se documentará antes de ampliar el trabajo. Ejecutar esta fase re
 - Nota abierta, no corregida aún: el mismo patrón de `crictl` sin `sudo` aparece 15+ veces más en otros 4 módulos ya incorporados (`arquitectura-kubernetes`, `troubleshooting-cluster-control-plane`, `kubeadm-etcd-backup-restore-upgrade`, `troubleshooting-nodos-networking`); pendiente de revisión aparte.
 - `npm run ci` verde (Node 22.23.2 tuvo que reinstalarse en `/tmp`, se había perdido entre sesiones). Commit `b3fef8f` en `main`, pusheado.
 
+### 2026-11-09 — Correcciones de M09 enfocadas en CKA
+
+- Corregidos tolerations, anti-affinity y laboratorios; ajustados checkpoints para CKA. Detalle y rectificación del informe anterior en `REVISION-TECNICA-M09.md`.
+- Typecheck, tests, validadores y build OK; Bash/YAML comprobados, sin ejecución en cluster.
+- Pendiente: limpieza tras los ejemplos. Cambios locales, sin commit ni publicación.
+
+### 2026-11-09 — Comprobación de commits pendientes de septiembre
+
+- M06 ya registrado en `b3fef8f`; bitácora en `7fb08f4` (15 de septiembre). `main` coincide con la referencia local `origin/main`; remoto sin consultar.
+- Pendientes de commit: cambios previos de M07 (fecha desconocida), M09 y documentación actual.
+
+### 2026-11-09 — Demo local para revisión
+
+- Preview del build actual en `http://127.0.0.1:4321/` (HTTP 200), pendiente de revisión del propietario antes del commit.
+
+### 2026-11-09 — Limpiezas de M09
+
+- Añadida limpieza en 7.8 antes del laboratorio 8 y ampliada la limpieza final para pasar a M10. CI completo OK; ambas visibles en la demo local. Sin commit.
+
 ### Estado para continuar
 
-V2 en producción (`main`, commit `b3fef8f`). Arquitectura completa y verificada, Cloudflare confirmado operativo. Pendiente: revisar los usos de `crictl` sin `sudo` en M02, M03, M15 y M16 (ver nota arriba); seguir con la revisión práctica de M06 en curso y del resto de módulos si el propietario encuentra más discrepancias al estudiar.
+V2 en producción. Último commit local de `main`: `7fb08f4` (2026-09-15), coincidente con la referencia local `origin/main`. Arquitectura completa y verificada, Cloudflare confirmado operativo en la revisión de septiembre. Pendiente: revisar los usos de `crictl` sin `sudo` en M02, M03, M15 y M16 (ver nota arriba); seguir con la revisión práctica de M06 en curso y del resto de módulos si el propietario encuentra más discrepancias al estudiar.
+
+Actualización 2026-11-09: M09 corregido con ambas limpiezas; pendiente la revisión local del propietario y los commits de M07, M09 y documentación.
 
 ## 30. Traspaso a otro agente de IA
 
@@ -1293,6 +1314,6 @@ Los módulos originales de la raíz son entregas del propietario y deben permane
 2. Revisar `git status --short` y asumir que los cambios existentes pertenecen al propietario; no revertirlos ni sobrescribirlos.
 3. Usar Node 22.23.2, declarado en `.nvmrc`.
 4. Ejecutar `npm run ci` después de cualquier cambio de implementación. Incluye typecheck, 8 pruebas, build limpio, consistencia del artefacto y dry-run de Cloudflare sin publicación.
-5. Registrar en la sección 29 los avances, hallazgos, decisiones y siguiente paso antes de terminar la tarea.
+5. Registrar brevemente en la sección 29 todos los cambios o mejoras, las comprobaciones realizadas y el siguiente paso antes de terminar cada tarea.
 
 La advertencia de colección vacía es esperada mientras no se incorporen módulos aprobados. Cualquier ruta de módulo generada en ese estado es un fallo: `astro build --force` y `scripts/validate-build.mjs` deben impedir que una ruta obsoleta sea aceptada.

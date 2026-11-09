@@ -5,7 +5,7 @@ slug: scheduling-avanzado-affinity-taints-priority
 title: Scheduling avanzado — Affinity, Taints y PriorityClasses
 description: Controla dónde se programan los pods con nodeSelector, node/pod affinity, taints y tolerations, y protege cargas críticas con PriorityClasses y preemption.
 access: free
-updated: "2026-09-08"
+updated: "2026-11-09"
 prerequisites: [arquitectura-kubernetes, workloads-deployments-daemonsets-statefulsets]
 ---
 
@@ -15,7 +15,7 @@ Este módulo cubre los mecanismos que controlan DÓNDE se programa un pod más a
 
 ## 2. Peso en el examen y preguntas típicas
 
-15% del examen, dominio Workloads & Scheduling. Preguntas típicas:
+Este módulo practica la competencia de admisión y scheduling de pods del dominio Workloads & Scheduling, que representa el 15% del examen junto con los temas de M07 y M08. Ese porcentaje corresponde al dominio completo, según el [temario oficial de CKA](https://training.linuxfoundation.org/certification/certified-kubernetes-administrator-cka/). Las siguientes tareas son ejercicios de preparación alineados con esa competencia:
 
 - Programa un pod únicamente en nodos con una label específica, usando nodeSelector.
 - Configura un Deployment con node affinity requerida para excluir ciertos nodos.
@@ -59,7 +59,7 @@ Es un requisito DURO. El scheduler NUNCA coloca el pod en un nodo que no cumpla 
 
 #### El campo preferredDuringSchedulingIgnoredDuringExecution
 
-Es una preferencia BLANDA. El scheduler intenta cumplirla, asignando un peso, weight, de 1 a 100, que suma puntos a los nodos que la cumplen durante la fase de puntuación, pero si ningún nodo la cumple, el pod se programa igualmente en el mejor nodo disponible según el resto de criterios.
+Es una preferencia BLANDA. El scheduler intenta cumplirla, asignando un peso, weight, de 1 a 100, que suma puntos a los nodos que la cumplen durante la fase de puntuación. Si ningún nodo cumple esa preferencia, aún puede programar el pod en un nodo que satisfaga los requisitos obligatorios. Una preferencia no garantiza que haya un nodo elegible: los taints, la afinidad requerida o los requests pueden mantener el pod Pending.
 
 El sufijo `IgnoredDuringExecution`, presente en ambos campos, significa que la afinidad SOLO se evalúa en el momento de programar el pod. Si las labels del nodo cambian DESPUÉS de que el pod ya está corriendo ahí, el pod NO se expulsa por eso; sigue corriendo en ese nodo aunque ya no cumpla la condición.
 
@@ -71,9 +71,11 @@ Mientras node affinity relaciona un pod con propiedades de los NODOS, pod affini
 
 Pod affinity programa el pod CERCA de otros pods que cumplen un selector, útil para colocar un frontend junto a su caché, reduciendo latencia de red. Pod anti-affinity programa el pod LEJOS de otros pods que cumplen un selector, útil para distribuir réplicas de un mismo Deployment entre distintos nodos o zonas, evitando que todas caigan con un único fallo de hardware.
 
-El campo `topologyKey` es la pieza que define qué significa cerca o lejos. No es una distancia física: es el nombre de una label de NODO que agrupa nodos en un mismo dominio de topología. Con `topologyKey: kubernetes.io/hostname`, cada nodo es su propio dominio, así que anti-affinity con esa clave significa nunca dos pods en el mismo nodo. Con `topologyKey: topology.kubernetes.io/zone`, el dominio es la zona completa, así que anti-affinity significa nunca dos pods en la misma zona, permitiendo que convivan varios pods en el mismo nodo mientras estén en zonas distintas de otros.
+El campo `topologyKey` define qué significa cerca o lejos: es la clave de una label de NODO que agrupa nodos en un dominio de topología. Con `kubernetes.io/hostname`, el dominio es el nodo; con `topology.kubernetes.io/zone`, es la zona. Los nodos deben tener la label utilizada para que la distribución tenga el significado esperado.
 
-Al igual que node affinity, pod affinity y anti-affinity soportan las variantes required y preferred, con el mismo significado duro/blando visto en 5.2.
+En pod anti-affinity, una regla `requiredDuringSchedulingIgnoredDuringExecution` impide programar el nuevo pod en un dominio donde ya haya otro pod seleccionado por la regla. Por hostname, dos réplicas seleccionadas no pueden compartir nodo. Por zona, no pueden compartir zona, lo que también impide compartir nodo. Una regla `preferredDuringSchedulingIgnoredDuringExecution` solo favorece la separación y permite compartir dominio si otros criterios llevan al scheduler a elegirlo.
+
+Para resolver una tarea CKA, identifica qué pods selecciona `labelSelector`, qué dominio define `topologyKey` y si la regla es required o preferred. El ejemplo 7.4 usa hostname para practicar la separación obligatoria entre nodos. Si se piden más réplicas que nodos elegibles, las restantes quedan Pending; con preferred, compartir nodo estaría permitido. Consulta la [referencia de affinity y anti-affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity) para localizar estos campos durante la práctica.
 
 ### 5.4 Taints y tolerations, el mecanismo inverso
 
@@ -93,19 +95,23 @@ Es la versión blanda de NoSchedule: el scheduler intenta evitar ese nodo para p
 
 Es el más agresivo: además de bloquear nuevos pods, EXPULSA a los pods que ya están corriendo en el nodo y no tienen una toleration para ese taint específico. Este efecto se dispara automáticamente cuando un nodo deja de responder: el control plane aplica los taints `node.kubernetes.io/not-ready` y `node.kubernetes.io/unreachable` con efecto NoExecute sobre el nodo problemático.
 
-Por defecto, todo pod recibe automáticamente, vía un admission controller llamado DefaultTolerationSeconds, una toleration implícita para esos dos taints, con `tolerationSeconds: 300`. Esto explica un comportamiento que suele sorprender en producción: cuando un nodo se cae, los pods que corrían ahí NO se reprograman de inmediato en otro nodo; el control plane espera 300 segundos, 5 minutos, antes de darlos por perdidos y expulsarlos, dando tiempo a que el nodo se recupere de un fallo transitorio de red sin causar una migración masiva innecesaria.
+Por defecto, los pods reciben tolerations para `node.kubernetes.io/not-ready` y `node.kubernetes.io/unreachable`, con `tolerationSeconds: 300`, salvo que ya especifiquen otras para esas claves. El plazo se cuenta desde que se aplica el taint, no desde el instante exacto del fallo del nodo. Los DaemonSets reciben tolerations sin límite de tiempo para esas condiciones. Para diagnosticar una expulsión en CKA, consulta las tolerations reales del pod: el plazo puede ser distinto del valor por defecto. Si un controller gestiona el pod eliminado, creará su sustituto; un pod independiente no se recrea automáticamente.
 
-Las tolerations tienen dos operadores. `Equal` exige que la toleration especifique clave, valor Y efecto, y coincidan exactamente con el taint. `Exists` solo exige que coincida la clave, ignorando el valor; si además se omite el campo `effect`, la toleration coincide con CUALQUIER efecto de esa clave, sea NoSchedule, PreferNoSchedule o NoExecute.
+Los operadores que usaremos son `Equal` y `Exists`. `Equal`, el valor por defecto, exige que coincidan clave y valor. `Exists` comprueba la clave sin exigir un valor; en ese caso se omite `value`. Si se especifica `effect`, también debe coincidir. Si se omite, la toleration acepta cualquier efecto de esa clave, tanto con Equal como con Exists.
+
+Si un nodo tiene varios taints, el pod debe tolerar todos los que bloqueen su programación. Tolerar NoExecute no cubre un NoSchedule de la misma clave cuando la toleration especifica explícitamente el efecto. Esta comprobación es parte del diagnóstico de un pod Pending y se documenta en la [referencia de taints y tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/).
 
 Una toleration nunca OBLIGA a un pod a ir a un nodo con taint; solo lo PERMITE. La decisión final de en qué nodo colocar el pod sigue dependiendo del resto de criterios de scheduling, incluida la afinidad si está configurada. Los DaemonSets de infraestructura crítica, como kube-proxy, además de tolerar los taints relevantes, suelen llevar una PriorityClass alta para minimizar el riesgo de quedar Pending bajo presión de recursos; PriorityClasses se profundiza en la sección 5.5 de este mismo módulo.
 
 ### 5.5 PriorityClasses y preemption
 
-Retomando la sección 5.3: viste que un DaemonSet crítico como kube-proxy puede quedar Pending por falta de recursos exactamente igual que cualquier otro pod, ya que desde la versión 1.12 de Kubernetes pasa por el scheduler estándar. PriorityClass es el mecanismo que protege a esas cargas críticas frente a ese riesgo.
+Retomando la sección 5.4: un DaemonSet crítico como kube-proxy puede quedar Pending por falta de recursos, ya que sus pods también pasan por el scheduler estándar. PriorityClass permite darles preferencia frente a cargas de menor prioridad.
 
 Una PriorityClass es un objeto cluster-wide, no namespaced, que define un valor entero, `value`: a mayor número, mayor prioridad. Un pod referencia una PriorityClass por nombre en `spec.priorityClassName`. Si un pod no especifica ninguna, recibe prioridad 0, salvo que exista una PriorityClass marcada con `globalDefault: true`, en cuyo caso todos los pods sin prioridad explícita heredan ese valor.
 
 Cuando un pod de alta prioridad no puede programarse por falta de recursos, el scheduler intenta la preemption: busca en algún nodo candidato uno o más pods de MENOR prioridad, los expulsa, delete, y programa ahí el pod de mayor prioridad. La preemption es el ÚLTIMO recurso: el scheduler primero intenta programar el pod normalmente en cualquier nodo con espacio libre; solo si eso falla en TODOS los nodos, evalúa expulsar pods de menor prioridad.
+
+Para diagnosticar Pending, recuerda que la prioridad no evita un taint ni una node affinity requerida. La preemption solo ayuda si retirar pods de menor prioridad permite cumplir las restricciones. No exige que el pod tenga una PriorityClass explícita: también cuenta su prioridad por defecto. Una clase con `preemptionPolicy: Never` conserva la prioridad en la cola, pero no permite desalojar otros pods.
 
 ## 6. Diagrama ASCII - decisión del scheduler con afinidad, taints y prioridad
 
@@ -123,7 +129,8 @@ Pod nuevo llega al scheduler
 |    2. Cumple nodeSelector / node affinity    |
 |       required?                              |
 |       NO -> nodo DESCARTADO                  |
-|    3. Cumple pod affinity required           |
+|    3. Cumple pod affinity / anti-affinity    |
+|       required                              |
 |       (con otros pods ya corriendo)?         |
 |       NO -> nodo DESCARTADO                  |
 |    4. Tiene recursos allocatable             |
@@ -131,8 +138,9 @@ Pod nuevo llega al scheduler
 |       NO -> nodo DESCARTADO                  |
 |                                              |
 |  Si NINGUN nodo sobrevive el filtrado:       |
-|    hay PriorityClass? -> intentar preemption |
-|    (expulsar pods de menor prioridad)        |
+|    si la politica permite preemption:        |
+|    evaluar retirar pods de menor prioridad   |
+|    solo si eso permite programar el pod      |
 |    si aun asi no hay nodo -> pod Pending     |
 +-------------------|--------------------------+
                      v
@@ -297,7 +305,7 @@ NAME                       READY   STATUS    NODE
 pod-affinity-preferred     1/1     Running   cka-worker1
 ```
 
-Ningún nodo tiene `disco=nvme`, pero el pod se programa igualmente porque la condición es blanda: la preferencia no se cumple, y el scheduler usa el resto de criterios para elegir nodo.
+Ningún nodo tiene `disco=nvme`, pero esa preferencia no bloquea la programación. Si existe un nodo que cumpla las restricciones obligatorias, el scheduler lo elige según el resto de criterios. La salida muestra un resultado posible; también puede elegir cka-worker2.
 
 ### 7.4 Pod anti-affinity, distribuir réplicas entre nodos
 
@@ -438,7 +446,7 @@ NAME                    READY   STATUS        NODE
 pod-con-toleration      0/1     Terminating   cka-worker2
 ```
 
-Pod que tolera NoExecute, pero solo durante 60 segundos:
+El taint NoSchedule de 7.5 sigue en cka-worker2: añadir NoExecute no lo reemplaza. El siguiente pod tolera ambos efectos y limita a 60 segundos únicamente la tolerancia a NoExecute. Si faltara la toleration de NoSchedule, quedaría Pending y no podrías observar la expulsión temporal.
 
 ```bash exec
 kubectl apply -f - <<'EOF'
@@ -450,6 +458,10 @@ spec:
   nodeSelector:
     kubernetes.io/hostname: cka-worker2
   tolerations:
+  - key: equipo
+    operator: Equal
+    value: facturacion
+    effect: NoSchedule
   - key: equipo
     operator: Equal
     value: facturacion
@@ -465,7 +477,7 @@ EOF
 kubectl get pod pod-tolerancia-temporal -w
 ```
 
-El pod arranca Running, y a los 60 segundos es expulsado automáticamente, aunque el taint no haya cambiado. Ctrl+C para salir del watch cuando termine.
+Tras asignarse al nodo, el pod puede llegar a Running y será eliminado al agotarse la tolerancia de 60 segundos a NoExecute. El plazo no comienza al arrancar nginx. Este pod es independiente, así que no se recreará en otro nodo. Ctrl+C para salir del watch cuando termine.
 
 Limpiar el taint antes de continuar con el resto del módulo:
 
@@ -571,11 +583,50 @@ relleno-baja-prioridad-6f9c8d-k7zxq        1/1     Running
 
 Uno de los cuatro pods de relleno fue expulsado, preemption, para hacer espacio a `pod-critico`. El Deployment `relleno-baja-prioridad` intentará recrear el pod perdido, y si el nodo sigue sin espacio, ese pod nuevo quedará Pending, no volverá a desalojar a `pod-critico` porque tiene menor prioridad.
 
+### 7.8 Limpieza de los ejemplos prácticos
+
+Completa estos pasos antes de empezar el laboratorio 8, en el mismo contexto y namespace donde ejecutaste los ejemplos. Así liberas los recursos reservados y retiras las condiciones de scheduling que añadiste a los workers.
+
+Primero, elimina los Deployments y espera a que desaparezcan sus pods; después elimina los pods independientes y las PriorityClasses de los ejemplos:
+
+```bash exec
+kubectl delete deployment web-distribuido relleno-baja-prioridad \
+  --ignore-not-found=true --cascade=foreground --wait=true
+
+kubectl delete pod pod-con-selector pod-affinity-required \
+  pod-affinity-imposible pod-affinity-preferred \
+  pod-sin-toleration pod-con-toleration \
+  pod-tolerancia-temporal pod-critico --ignore-not-found=true
+
+kubectl delete priorityclass prioridad-alta prioridad-baja --ignore-not-found=true
+```
+
+`--ignore-not-found=true` permite continuar si algún pod ya fue eliminado por preemption o NoExecute. Eliminar primero los Deployments evita que vuelvan a crear los pods que estás retirando.
+
+Retira las labels de disco y todos los efectos del taint equipo de los ejemplos:
+
+```bash exec
+kubectl label node cka-worker1 disco-
+kubectl label node cka-worker2 disco-
+kubectl taint node cka-worker2 equipo-
+```
+
+Comprueba el resultado antes de continuar:
+
+```bash exec
+kubectl get pods,deployments
+kubectl get priorityclass prioridad-alta prioridad-baja --ignore-not-found=true
+kubectl get nodes cka-worker1 cka-worker2 \
+  -o custom-columns='NODO:.metadata.name,DISCO:.metadata.labels.disco,TAINTS:.spec.taints'
+```
+
+No deben quedar pods ni Deployments de estos ejemplos, ni las dos PriorityClasses. La columna DISCO debe mostrar `<none>` en ambos workers y sus taints no deben incluir equipo. Con eso, puedes empezar el laboratorio 8.
+
 ## 8. Laboratorio guiado
 
-Objetivo: diagnosticar un pod Pending y distinguir si la causa es un taint, una afinidad imposible, o falta de recursos, el escenario de troubleshooting más realista de esta sección.
+Objetivo: diagnosticar un pod Pending al combinar una node affinity requerida con un taint no tolerado. Practicarás la secuencia útil para CKA: leer Events, contrastar afinidad y taints, aplicar una corrección y comprobar la asignación.
 
-Paso 1, preparar un escenario con causa oculta, combinando un taint real con una afinidad que apunta a otro nodo distinto:
+Paso 1, aplicar un taint a cka-worker1 y crear un pod cuya afinidad solo permita ese nodo:
 
 ```bash exec
 kubectl taint node cka-worker1 mantenimiento=true:NoSchedule
@@ -597,7 +648,6 @@ spec:
             operator: In
             values:
             - cka-worker1
-            - cka-worker2
   containers:
   - name: app
     image: nginx:1.25
@@ -615,66 +665,37 @@ NAME               READY   STATUS    RESTARTS
 pod-diagnostico    0/1     Pending   0
 ```
 
-Paso 3, diagnóstico paso a paso:
+Paso 3, contrastar el motivo de scheduling con la configuración real:
 
 ```bash exec
 kubectl describe pod pod-diagnostico
+kubectl get nodes -L kubernetes.io/hostname
+kubectl get node cka-worker1 -o jsonpath='{.spec.taints}{"\n"}'
 ```
+
+En Events aparecerá FailedScheduling. Este es un fragmento orientativo del motivo relevante; los recuentos y las demás razones dependen del estado del cluster:
 
 ```text output
-Events:
-  Warning  FailedScheduling  0/3 nodes are available: 1 node(s) had untolerated taint {mantenimiento: true}, 1 node(s) didn't match Pod's node affinity/selector, 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }.
+1 node(s) had untolerated taint {mantenimiento: true}
 ```
 
-El mensaje de Events lista, por cada nodo descartado, la razón EXACTA. En este caso: cka-worker1 fue descartado por el taint mantenimiento, cka-worker2 fue descartado porque no coincide con la afinidad, y cka-cp1 fue descartado por su taint de control-plane de siempre. Los tres nodos del cluster quedaron fuera, cada uno por un motivo distinto.
+La afinidad excluye cka-worker2 y cka-cp1. cka-worker1 cumple la afinidad, pero su taint mantenimiento bloquea el pod. Events agrupa motivos y cantidades; no identifica necesariamente qué nodo corresponde a cada motivo. Por eso contrastamos el mensaje con las labels y los taints reales.
 
-Paso 4, corregir agregando la toleration faltante:
+Paso 4, añadir la toleration que falta conservando las existentes:
 
 ```bash exec
-kubectl patch pod pod-diagnostico --type=json -p='[{"op":"add","path":"/spec/tolerations","value":[{"key":"mantenimiento","operator":"Equal","value":"true","effect":"NoSchedule"}]}]'
+kubectl get pod pod-diagnostico -o jsonpath='{.spec.tolerations}{"\n"}'
+kubectl patch pod pod-diagnostico --type=json -p='[{"op":"add","path":"/spec/tolerations/-","value":{"key":"mantenimiento","operator":"Equal","value":"true","effect":"NoSchedule"}}]'
 ```
 
-El patch a un pod ya creado con este campo suele fallar porque `tolerations` no es mutable en un pod existente. Confirmarlo:
+Kubernetes permite añadir tolerations a un pod existente, pero no eliminar ni modificar las que ya tiene. En este cluster kubeadm, la admisión añade tolerations por defecto y la lista ya existe. El sufijo `/-` agrega una entrada al final. Usar `/spec/tolerations` con una lista nueva sustituiría la lista completa y sería rechazado si elimina las entradas anteriores. Si la lista no existiera, se crearía con `/spec/tolerations` y una lista que contenga la nueva toleration.
 
-```bash exec
-kubectl get pod pod-diagnostico -o jsonpath='{.status.phase}'
-```
-
-Si el patch fue rechazado, la vía correcta es eliminar y recrear el pod con la toleration incluida desde el manifiesto original, en lugar de editarlo en caliente.
-
-```bash exec
-kubectl delete pod pod-diagnostico
-
-kubectl apply -f - <<'EOF'
-apiVersion: v1
-kind: Pod
-metadata:
-  name: pod-diagnostico
-spec:
-  affinity:
-    nodeAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        nodeSelectorTerms:
-        - matchExpressions:
-          - key: kubernetes.io/hostname
-            operator: In
-            values:
-            - cka-worker1
-            - cka-worker2
-  tolerations:
-  - key: mantenimiento
-    operator: Equal
-    value: "true"
-    effect: NoSchedule
-  containers:
-  - name: app
-    image: nginx:1.25
-EOF
-```
+Para CKA, añadir una toleration puede resolver el bloqueo sin recrear el pod. Si necesitas cambiar una toleration existente, prepara el manifiesto corregido y recrea el pod; si lo gestiona un Deployment, modifica `spec.template.spec.tolerations` para que sus réplicas nuevas reciban la configuración. La [referencia de actualización de pods](https://kubernetes.io/docs/concepts/workloads/pods/#pod-update-and-replacement) recoge qué cambios admite la API.
 
 Paso 5, verificar la recuperación:
 
 ```bash exec
+kubectl wait --for=condition=PodScheduled pod/pod-diagnostico --timeout=60s
 kubectl get pod pod-diagnostico -o wide
 ```
 
@@ -695,13 +716,13 @@ kubectl taint node cka-worker1 mantenimiento=true:NoSchedule-
 
 ¿Qué diferencia práctica hay entre `requiredDuringSchedulingIgnoredDuringExecution` y `preferredDuringSchedulingIgnoredDuringExecution` en node affinity?
 
-Respuesta: la variante required es un requisito duro, si ningún nodo la cumple el pod queda Pending. La variante preferred es una preferencia blanda, con un peso que influye en la puntuación de nodos, pero el pod se programa igualmente aunque ningún nodo la cumpla.
+Respuesta: required es un requisito duro; si ningún nodo lo cumple, el pod queda Pending. Preferred aporta un peso a la puntuación de nodos, pero incumplir esa preferencia no bloquea la programación. El pod sigue necesitando un nodo que cumpla los demás requisitos, como recursos suficientes y taints tolerados.
 
 **Pregunta 2**
 
-Un Deployment usa pod anti-affinity con `topologyKey: topology.kubernetes.io/zone`. ¿Puede haber dos réplicas en el mismo nodo?
+Un Deployment usa pod anti-affinity required con `topologyKey: kubernetes.io/hostname` y un selector que incluye todas sus réplicas. Hay dos nodos elegibles y se piden tres réplicas. ¿Qué ocurre? ¿Qué cambiaría con preferred?
 
-Respuesta: sí, siempre que ese nodo esté en una zona distinta a la de las otras réplicas. El topologyKey define el dominio de cercanía; con la clave de zona, la restricción es a nivel de zona, no de nodo individual.
+Respuesta: con required, solo pueden programarse dos réplicas, una por nodo, y la tercera queda Pending. Con preferred, la separación es una preferencia y la tercera puede compartir nodo si se cumplen los demás requisitos. El topologyKey define el dominio donde se evalúa la separación: si fuera una regla requerida por zona, tampoco podrían compartir nodo, porque compartirían la misma zona.
 
 **Pregunta 3**
 
@@ -711,9 +732,9 @@ Respuesta: NoSchedule solo bloquea la programación de pods NUEVOS sin toleratio
 
 **Pregunta 4**
 
-Un nodo deja de responder de forma inesperada. ¿Cuánto tarda por defecto Kubernetes en expulsar los pods que corrían ahí, y por qué mecanismo?
+Un pod de un Deployment tiene una toleration con `tolerationSeconds: 300` para `node.kubernetes.io/unreachable:NoExecute`. Si se aplica ese taint y no se retira, ¿qué ocurre?
 
-Respuesta: 300 segundos por defecto. El control plane aplica los taints `node.kubernetes.io/not-ready` o `node.kubernetes.io/unreachable` con efecto NoExecute, y todo pod recibe automáticamente, vía el admission controller DefaultTolerationSeconds, una toleration implícita de 300 segundos para esos taints, dando margen a que el nodo se recupere antes de forzar la migración.
+Respuesta: el pod tolera ese taint durante 300 segundos desde su aplicación; al agotarse el plazo, puede ser eliminado y el Deployment creará un sustituto. Ese plazo no mide el tiempo total desde el fallo del nodo ni garantiza cuándo estará Running el nuevo pod. Comprueba siempre las tolerations reales: un DaemonSet, por ejemplo, recibe tolerations sin límite para unreachable y not-ready.
 
 **Pregunta 5**
 
@@ -833,9 +854,9 @@ Diagnóstico paso a paso:
 kubectl describe pod pod-diagnostico
 ```
 
-Revisar la sección Events al final: el mensaje FailedScheduling lista, nodo por nodo, la razón exacta del descarte, sea taint no tolerado, afinidad no cumplida, o recursos insuficientes. Ese mensaje es la fuente de verdad; no hay que adivinar la causa.
+Revisar Events al final: FailedScheduling agrupa los motivos que impiden programar el pod, como taints no tolerados, afinidad no cumplida o recursos insuficientes. Usa esos motivos para decidir qué revisar; el mensaje no es una relación detallada de cada nodo con su causa.
 
-Si el mensaje menciona un taint no tolerado, listar los taints del nodo señalado:
+Si el mensaje menciona un taint no tolerado, listar los taints del nodo candidato, por ejemplo cka-worker1:
 
 ```bash exec
 kubectl describe node cka-worker1 | grep Taints
@@ -850,29 +871,25 @@ kubectl get nodes --show-labels
 
 **Solución:**
 
-Corregir la causa exacta identificada en Events: agregar la toleration faltante, corregir la afinidad para que coincida con labels reales existentes, o liberar recursos según corresponda. Nunca es necesario adivinar; el mensaje de Events siempre indica la razón precisa por nodo.
+Corregir la causa confirmada al contrastar Events con la configuración: añadir la toleration que pide la tarea, corregir la afinidad o las labels, o revisar los requests y los recursos disponibles. Después, comprobar que el pod ha sido asignado a un nodo y que llega al estado esperado.
 
-### Caso 2: tolerations agregadas mediante edit no surten efecto
+### Caso 2: un patch de tolerations es rechazado
 
 **Síntoma:**
 
-Se intenta agregar una toleration a un pod ya existente con `kubectl edit` o `kubectl patch`, y el pod sigue Pending, o el comando falla directamente.
+Se intenta añadir una toleration a un pod existente, pero la API rechaza el cambio. Añadir entradas está permitido; sustituir la lista puede eliminar tolerations anteriores y causar el rechazo.
 
 Diagnóstico paso a paso:
 
 ```bash exec
-kubectl patch pod pod-diagnostico --type=json -p='[{"op":"add","path":"/spec/tolerations","value":[]}]'
+kubectl get pod pod-diagnostico -o jsonpath='{.spec.tolerations}{"\n"}'
 ```
 
-```text output
-The Pod "pod-diagnostico" is invalid: spec: Forbidden: pod updates may not add or remove containers, disallowed fields...
-```
-
-El campo `spec.tolerations`, junto con la mayoría de campos de `spec`, es INMUTABLE una vez el pod fue creado. Un Pod no gestionado por un controller, sin Deployment ni ReplicaSet detrás, no puede simplemente editarse para agregar tolerations.
+Compara la lista existente con el cambio que intentaste aplicar. Un JSON Patch con `add` sobre `/spec/tolerations` sustituye esa propiedad si ya existe; no añade automáticamente un elemento. También debes conservar las tolerations que Kubernetes incorporó al crear el pod. Para añadir una entrada a una lista existente, usa `/spec/tolerations/-`, como en el laboratorio guiado.
 
 **Solución:**
 
-Eliminar y recrear el pod con la toleration ya incluida en el manifiesto original. Si el pod pertenece a un Deployment, StatefulSet o DaemonSet, corregir el `template.spec.tolerations` del controller: el controller se encargará de recrear los pods automáticamente con la configuración nueva.
+Añadir la nueva toleration conservando todas las anteriores. Si la tarea requiere modificar o retirar una existente, recrear el pod con el manifiesto corregido. Para un Deployment, corregir `spec.template.spec.tolerations` y verificar su rollout. Si el cambio se acepta pero el pod sigue Pending, volver a Events: puede quedar otro taint sin tolerar, una afinidad no satisfecha o falta de recursos.
 
 ### Caso 3: preemption inesperada de una carga que se creía protegida
 
@@ -892,7 +909,7 @@ Confirmar el valor de prioridad efectivo del pod expulsado.
 kubectl get priorityclass
 ```
 
-Revisar si alguna PriorityClass tiene `globalDefault: true`, y con qué valor. Si NO existe ninguna con globalDefault, todo pod sin priorityClassName recibe prioridad 0, la más baja posible, y es el primer candidato a expulsión frente a cualquier carga con prioridad explícita mayor.
+Revisar si alguna PriorityClass tiene `globalDefault: true`, y con qué valor. Sin una clase por defecto, los pods nuevos sin priorityClassName reciben prioridad 0. Ese valor no es el mínimo: también existen prioridades negativas. Un pod de prioridad 0 puede ser candidato a preemption frente a otro de prioridad mayor si desalojarlo permite programar al que espera; no implica que siempre vaya a ser la primera víctima.
 
 ```bash exec
 kubectl get events --field-selector reason=Preempted
@@ -910,16 +927,48 @@ Entorno principal: cluster kubeadm de 3 nodos. Los ejemplos de anti-affinity, ta
 
 **Alternativa K3s (plan B):** nodeSelector, node affinity, pod affinity/anti-affinity, taints, tolerations y PriorityClasses son parte de la API estándar de Kubernetes y funcionan de forma idéntica en K3s. La limitación es la misma que en módulos anteriores: con un único nodo, no hay forma de observar distribución entre nodos, anti-affinity, topologyKey, ni desalojo real por taints entre nodos distintos, ya que solo existe un nodo candidato en todo momento.
 
-Limpieza del módulo:
+### Limpieza final del módulo
+
+Antes de pasar a M10, elimina todos los recursos creados en M09, en el mismo contexto y namespace donde practicaste. Esta limpieza incluye los ejemplos del punto 7 y los laboratorios posteriores; puedes ejecutarla aunque ya hayas completado la limpieza intermedia.
+
+Elimina primero los Deployments y sus pods, y después los pods independientes y las PriorityClasses:
 
 ```bash exec
-kubectl delete pod pod-con-selector pod-affinity-required pod-affinity-imposible pod-affinity-preferred pod-sin-toleration pod-con-toleration pod-tolerancia-temporal pod-critico pod-diagnostico pod-con-tolerancia pod-critico-zona
-kubectl delete deployment web-distribuido relleno-baja-prioridad
-kubectl delete priorityclass prioridad-alta prioridad-baja alta-prioridad baja-prioridad
+kubectl delete deployment web-distribuido relleno-baja-prioridad \
+  --ignore-not-found=true --cascade=foreground --wait=true
+
+kubectl delete pod pod-con-selector pod-affinity-required \
+  pod-affinity-imposible pod-affinity-preferred \
+  pod-sin-toleration pod-con-toleration pod-tolerancia-temporal \
+  pod-critico pod-diagnostico pod-con-tolerancia pod-critico-zona \
+  --ignore-not-found=true
+
+kubectl delete priorityclass prioridad-alta prioridad-baja \
+  alta-prioridad baja-prioridad --ignore-not-found=true
+```
+
+Retira las labels y los taints añadidos durante el módulo y elimina el archivo del laboratorio cronometrado:
+
+```bash exec
 kubectl label node cka-worker1 disco-
 kubectl label node cka-worker2 disco- entorno-
-kubectl taint node cka-worker1 reservado=equipo-datos:NoSchedule- 2>/dev/null
+kubectl taint node cka-worker1 mantenimiento-
+kubectl taint node cka-worker1 reservado-
+kubectl taint node cka-worker2 equipo-
+rm -f /tmp/nodo-critico.txt
 ```
+
+Si una label o un taint ya se retiró, kubectl puede indicar que no existe. Continúa con la comprobación final:
+
+```bash exec
+kubectl get pods,deployments
+kubectl get priorityclass prioridad-alta prioridad-baja \
+  alta-prioridad baja-prioridad --ignore-not-found=true
+kubectl get nodes cka-worker1 cka-worker2 \
+  -o custom-columns='NODO:.metadata.name,DISCO:.metadata.labels.disco,ENTORNO:.metadata.labels.entorno,TAINTS:.spec.taints'
+```
+
+No deben quedar pods ni Deployments de M09, ni ninguna de sus cuatro PriorityClasses. Las labels disco y entorno usadas en los ejemplos deben haber desaparecido; los taints de los workers no deben incluir mantenimiento, reservado ni equipo. Los demás recursos y condiciones previos del cluster pueden seguir presentes. El entorno queda listo para M10.
 
 ---
 

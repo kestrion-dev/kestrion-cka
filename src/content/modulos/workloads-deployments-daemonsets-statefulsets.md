@@ -141,7 +141,7 @@ maxSurge=1, maxUnavailable=0
 ReplicaSet-v1 (imagen nginx:1.25): 4/4 pods Running
 
 Usuario ejecuta:
-kubectl set image deployment/web nginx=nginx:1.26
+kubectl set image deployment/web web=nginx:1.26
 
 PASO 1 - se crea ReplicaSet-v2, aun en 0:
   ReplicaSet-v1: [P][P][P][P]  (4 pods, imagen 1.25)
@@ -221,7 +221,7 @@ kubectl get replicaset -l app=web
 Ejecutar la actualización:
 
 ```bash exec
-kubectl set image deployment/web nginx=nginx:1.26
+kubectl set image deployment/web web=nginx:1.26
 kubectl rollout status deployment/web
 ```
 
@@ -261,7 +261,7 @@ kubectl rollout history deployment/web --revision=1
 Pausar un rollout a mitad de camino, útil cuando detectas un problema durante el despliegue:
 
 ```bash exec
-kubectl set image deployment/web nginx=nginx:1.27
+kubectl set image deployment/web web=nginx:1.27
 kubectl rollout pause deployment/web
 ```
 
@@ -339,17 +339,24 @@ Confirmar que el scheduler por defecto es quien coloca estos pods, no el DaemonS
 
 ```bash exec
 kubectl get pod -l app=node-monitor -o jsonpath='{.items[0].spec.affinity.nodeAffinity}'
-kubectl describe pod -l app=node-monitor | grep -A2 "Events:"
 ```
 
 ```text output
 {"requiredDuringSchedulingIgnoredDuringExecution":{"nodeSelectorTerms":[{"matchFields":[{"key":"metadata.name","operator":"In","values":["cka-worker1"]}]}]}}
+```
 
+El campo nodeAffinity confirma el mecanismo de 5.3. Para ver el evento Scheduled, ojo con un detalle documentado de kubectl: `--show-events` es `true` por defecto solo al describir un objeto individual; al describir por selector, como aquí con `-l`, queda en `false` y `grep "Events:"` no encuentra nada aunque el comando no dé error. Para el examen, lo fiable es describir el pod por su nombre exacto, no por selector:
+
+```bash exec
+kubectl describe pod node-monitor-4jkxc | grep -A2 "Events:"
+```
+
+```text output
 Events:
   Normal  Scheduled  <invalid>  default-scheduler  Successfully assigned default/node-monitor-4jkxc to cka-worker1
 ```
 
-El campo nodeAffinity confirma el mecanismo de 5.3, y el evento Scheduled confirma que fue default-scheduler quien hizo el bind, no el DaemonSet controller.
+El evento Scheduled confirma que fue default-scheduler quien hizo el bind, no el DaemonSet controller. Como alternativa, forzando `--show-events=true` también funciona sobre el selector: `kubectl describe pod -l app=node-monitor --show-events=true | grep -A2 "Events:"`.
 
 Hacer que también corra en el control plane, agregando la toleration correspondiente:
 
