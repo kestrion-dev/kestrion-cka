@@ -587,11 +587,11 @@ Uno de los cuatro pods de relleno fue expulsado, preemption, para hacer espacio 
 
 Completa estos pasos antes de empezar el laboratorio 8, en el mismo contexto y namespace donde ejecutaste los ejemplos. Así liberas los recursos reservados y retiras las condiciones de scheduling que añadiste a los workers.
 
-Primero, elimina los Deployments y espera a que desaparezcan sus pods; después elimina los pods independientes y las PriorityClasses de los ejemplos:
+Primero, elimina los Deployments; después elimina los pods independientes y las PriorityClasses de los ejemplos:
 
 ```bash exec
 kubectl delete deployment web-distribuido relleno-baja-prioridad \
-  --ignore-not-found=true --cascade=foreground --wait=true
+  --ignore-not-found=true
 
 kubectl delete pod pod-con-selector pod-affinity-required \
   pod-affinity-imposible pod-affinity-preferred \
@@ -620,7 +620,7 @@ kubectl get nodes cka-worker1 cka-worker2 \
   -o custom-columns='NODO:.metadata.name,DISCO:.metadata.labels.disco,TAINTS:.spec.taints'
 ```
 
-No deben quedar pods ni Deployments de estos ejemplos, ni las dos PriorityClasses. La columna DISCO debe mostrar `<none>` en ambos workers y sus taints no deben incluir equipo. Con eso, puedes empezar el laboratorio 8.
+No deben quedar pods ni Deployments de estos ejemplos, ni las dos PriorityClasses. Si algún pod sigue en Terminating, espera y repite la comprobación. La columna DISCO debe mostrar `<none>` en ambos workers y sus taints no deben incluir equipo. Con eso, puedes empezar el laboratorio 8.
 
 ## 8. Laboratorio guiado
 
@@ -935,7 +935,7 @@ Elimina primero los Deployments y sus pods, y después los pods independientes y
 
 ```bash exec
 kubectl delete deployment web-distribuido relleno-baja-prioridad \
-  --ignore-not-found=true --cascade=foreground --wait=true
+  --ignore-not-found=true
 
 kubectl delete pod pod-con-selector pod-affinity-required \
   pod-affinity-imposible pod-affinity-preferred \
@@ -968,7 +968,7 @@ kubectl get nodes cka-worker1 cka-worker2 \
   -o custom-columns='NODO:.metadata.name,DISCO:.metadata.labels.disco,ENTORNO:.metadata.labels.entorno,TAINTS:.spec.taints'
 ```
 
-No deben quedar pods ni Deployments de M09, ni ninguna de sus cuatro PriorityClasses. Las labels disco y entorno usadas en los ejemplos deben haber desaparecido; los taints de los workers no deben incluir mantenimiento, reservado ni equipo. Los demás recursos y condiciones previos del cluster pueden seguir presentes. El entorno queda listo para M10.
+No deben quedar pods ni Deployments de M09, ni ninguna de sus cuatro PriorityClasses. Si algún pod sigue en Terminating, espera y repite la comprobación. Las labels disco y entorno usadas en los ejemplos deben haber desaparecido; los taints de los workers no deben incluir mantenimiento, reservado ni equipo. Los demás recursos y condiciones previos del cluster pueden seguir presentes. El entorno queda listo para M10.
 
 ---
 
