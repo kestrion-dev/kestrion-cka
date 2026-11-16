@@ -590,18 +590,17 @@ Completa estos pasos antes de empezar el laboratorio 8, en el mismo contexto y n
 Primero, elimina los Deployments; después elimina los pods independientes y las PriorityClasses de los ejemplos:
 
 ```bash exec
-kubectl delete deployment web-distribuido relleno-baja-prioridad \
-  --ignore-not-found=true
+kubectl delete deployment web-distribuido relleno-baja-prioridad
 
 kubectl delete pod pod-con-selector pod-affinity-required \
   pod-affinity-imposible pod-affinity-preferred \
   pod-sin-toleration pod-con-toleration \
-  pod-tolerancia-temporal pod-critico --ignore-not-found=true
+  pod-tolerancia-temporal pod-critico
 
-kubectl delete priorityclass prioridad-alta prioridad-baja --ignore-not-found=true
+kubectl delete priorityclass prioridad-alta prioridad-baja
 ```
 
-`--ignore-not-found=true` permite continuar si algún pod ya fue eliminado por preemption o NoExecute. Eliminar primero los Deployments evita que vuelvan a crear los pods que estás retirando.
+Eliminar primero los Deployments evita que vuelvan a crear los pods que estás retirando.
 
 Retira las labels de disco y todos los efectos del taint equipo de los ejemplos:
 
@@ -615,7 +614,7 @@ Comprueba el resultado antes de continuar:
 
 ```bash exec
 kubectl get pods,deployments
-kubectl get priorityclass prioridad-alta prioridad-baja --ignore-not-found=true
+kubectl get priorityclass prioridad-alta prioridad-baja
 kubectl get nodes cka-worker1 cka-worker2 \
   -o custom-columns='NODO:.metadata.name,DISCO:.metadata.labels.disco,TAINTS:.spec.taints'
 ```
@@ -704,10 +703,12 @@ NAME               READY   STATUS    NODE
 pod-diagnostico    1/1     Running   cka-worker1
 ```
 
-Paso 6, limpiar el taint de mantenimiento:
+Paso 6, eliminar el pod de práctica y retirar el taint de mantenimiento:
 
 ```bash exec
+kubectl delete pod pod-diagnostico
 kubectl taint node cka-worker1 mantenimiento=true:NoSchedule-
+kubectl get pod pod-diagnostico
 ```
 
 ## 9. Checkpoint
@@ -934,17 +935,15 @@ Antes de pasar a M10, elimina todos los recursos creados en M09, en el mismo con
 Elimina primero los Deployments y sus pods, y después los pods independientes y las PriorityClasses:
 
 ```bash exec
-kubectl delete deployment web-distribuido relleno-baja-prioridad \
-  --ignore-not-found=true
+kubectl delete deployment web-distribuido relleno-baja-prioridad
 
 kubectl delete pod pod-con-selector pod-affinity-required \
   pod-affinity-imposible pod-affinity-preferred \
   pod-sin-toleration pod-con-toleration pod-tolerancia-temporal \
-  pod-critico pod-diagnostico pod-con-tolerancia pod-critico-zona \
-  --ignore-not-found=true
+  pod-critico pod-diagnostico pod-con-tolerancia pod-critico-zona
 
 kubectl delete priorityclass prioridad-alta prioridad-baja \
-  alta-prioridad baja-prioridad --ignore-not-found=true
+  alta-prioridad baja-prioridad
 ```
 
 Retira las labels y los taints añadidos durante el módulo y elimina el archivo del laboratorio cronometrado:
@@ -958,12 +957,12 @@ kubectl taint node cka-worker2 equipo-
 rm -f /tmp/nodo-critico.txt
 ```
 
-Si una label o un taint ya se retiró, kubectl puede indicar que no existe. Continúa con la comprobación final:
+Comprueba el estado final:
 
 ```bash exec
 kubectl get pods,deployments
 kubectl get priorityclass prioridad-alta prioridad-baja \
-  alta-prioridad baja-prioridad --ignore-not-found=true
+  alta-prioridad baja-prioridad
 kubectl get nodes cka-worker1 cka-worker2 \
   -o custom-columns='NODO:.metadata.name,DISCO:.metadata.labels.disco,ENTORNO:.metadata.labels.entorno,TAINTS:.spec.taints'
 ```

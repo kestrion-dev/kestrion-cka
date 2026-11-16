@@ -1257,7 +1257,8 @@ Cada hallazgo se documentará antes de ampliar el trabajo. Ejecutar esta fase re
 ### 2026-11-09 — Limpiezas de M09
 
 - Añadida limpieza en 7.8 antes del laboratorio 8 y ampliada la limpieza final para pasar a M10. CI completo OK; ambas visibles en la demo local. Sin commit.
-- Retirados `--cascade=foreground` y `--wait=true` de ambas limpiezas; comprobar que los pods desaparezcan antes de continuar.
+- Limpiezas simplificadas: retirados `--cascade=foreground`, `--wait=true` y `--ignore-not-found=true`, sin explicaciones de NotFound.
+- Laboratorio 8: añadido borrado de `pod-diagnostico` y comprobación al cierre, junto con la retirada del taint.
 
 ### Estado para continuar
 

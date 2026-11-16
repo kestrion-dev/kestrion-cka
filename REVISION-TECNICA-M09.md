@@ -57,7 +57,7 @@ Fuentes: [Taints and Tolerations — Kubernetes](https://kubernetes.io/docs/conc
 
 ### 6. Limpieza entre prácticas y al finalizar
 
-Sección 7.8: elimina los Deployments, sus pods, los pods independientes, las PriorityClasses, las labels y los taints de los ejemplos antes del laboratorio 8. La limpieza final incluye también los recursos de los laboratorios 8 y 10 y `/tmp/nodo-critico.txt`. Ambas incluyen comprobaciones; los borrados de recursos toleran objetos ya eliminados y se explican los avisos por labels o taints ausentes.
+Sección 7.8: elimina los recursos de los ejemplos antes del laboratorio 8. El laboratorio 8 elimina su pod y taint al cierre. La limpieza final incluye todos los recursos de M09 y `/tmp/nodo-critico.txt`, con comandos simples y comprobaciones.
 
 ## Verificación
 
