@@ -1262,8 +1262,8 @@ Cada hallazgo se documentará antes de ampliar el trabajo. Ejecutar esta fase re
 
 ### 2026-11-16 — Correcciones de M10 (Endpoints/EndpointSlices)
 
-- `M10-Services-kube-proxy.md`: Endpoints marcado como deprecado (1.33), añadido EndpointSlice manual en 7.4, checkpoint 5 y paso 5 del lab cronometrado ahora con EndpointSlices, limpieza ampliada.
-- Sin ejecución en cluster; módulo aún sin incorporar a `src/content/modulos/`. Sin commit.
+- `M10-Services-kube-proxy.md`: Endpoints marcado como deprecado (1.33), añadido EndpointSlice manual en 7.4, checkpoint 5 y limpieza ampliada. Tras revisión, 7.1, 7.4, sección 8, lab cronometrado y troubleshooting muestran ambas APIs (Endpoints, el del examen, y EndpointSlice).
+- Sin ejecución en cluster; cambios portados también a `src/content/modulos/services-kube-proxy.md`. Sin commit.
 
 ### Estado para continuar
 

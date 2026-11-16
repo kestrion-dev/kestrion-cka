@@ -20,7 +20,7 @@ Este módulo cubre cómo Kubernetes expone un conjunto de pods bajo una identida
 - Crea un Service ClusterIP que exponga un Deployment existente.
 - Crea un Service NodePort en un puerto específico.
 - Un Service no enruta tráfico a ningún pod, diagnostica por qué.
-- Crea un Service sin selector, con Endpoints manuales, apuntando a un backend externo.
+- Crea un Service sin selector, con Endpoints o EndpointSlice manual, apuntando a un backend externo.
 - Identifica en qué modo corre kube-proxy en este cluster.
 
 ## 3. Prerrequisitos
@@ -68,9 +68,9 @@ No enruta tráfico de pods en absoluto. Es un alias DNS: mapea el nombre del Ser
 
 ### 5.3 Endpoints y EndpointSlices
 
-Un Service, por sí mismo, no sabe directamente qué pods existen; delega esa información en otro objeto. Endpoints es el objeto original de Kubernetes que lista las IPs y puertos de los pods que coinciden con el selector del Service. Desde la versión 1.19, Kubernetes usa internamente EndpointSlices, una versión más escalable del mismo concepto, que divide la lista en fragmentos, slices, para clusters con miles de pods por Service, evitando actualizar un único objeto gigante en cada cambio.
+Un Service, por sí mismo, no sabe directamente qué pods existen; delega esa información en otro objeto. Endpoints es el objeto original de Kubernetes que lista las IPs y puertos de los pods que coinciden con el selector del Service. Kubernetes usa internamente EndpointSlices, una versión más escalable del mismo concepto, que divide la lista en fragmentos, slices, para clusters con miles de pods por Service, evitando actualizar un único objeto gigante en cada cambio. EndpointSlices llegó a GA en la versión 1.21, y kube-proxy los usa por defecto desde la 1.19.
 
-`kubectl get endpoints` sigue funcionando por compatibilidad y sigue siendo material de examen, pero `kubectl get endpointslices` muestra el objeto que realmente usa el cluster internamente. Un controller dedicado mantiene ambos sincronizados automáticamente con el estado real de los pods, siguiendo el mismo patrón de reconciliation loop visto en M02.
+La API de Endpoints está DEPRECADA desde Kubernetes 1.33: `kubectl get endpoints` sigue funcionando y sigue siendo material de examen, pero imprime una advertencia de deprecación. `kubectl get endpointslices` muestra el objeto que realmente usa el cluster internamente y es el recomendado hoy. El examen puede pedir cualquiera de los dos, así que debes dominar ambos. Un controller dedicado mantiene ambos sincronizados automáticamente con el estado real de los pods, siguiendo el mismo patrón de reconciliation loop visto en M02.
 
 ### 5.4 kube-proxy y sus modos
 
@@ -155,19 +155,28 @@ NAME             TYPE        CLUSTER-IP     PORT(S)
 web-svc-demo     ClusterIP   10.96.45.2     80/TCP
 ```
 
-Verificar los Endpoints y el EndpointSlice generados automáticamente:
+Verificar los Endpoints y el EndpointSlice generados automáticamente.
+
+Endpoints (el que suele pedir el examen):
 
 ```bash exec
 kubectl get endpoints web-svc-demo
-kubectl get endpointslices -l kubernetes.io/service-name=web-svc-demo
 ```
 
 ```text output
 NAME             ENDPOINTS
 web-svc-demo     192.168.135.5:80,192.168.198.11:80,192.168.222.3:80
+```
 
-NAME                     ADDRESSTYPE   PORTS
-web-svc-demo-x7k2p       IPv4          80
+EndpointSlice (API moderna):
+
+```bash exec
+kubectl get endpointslices -l kubernetes.io/service-name=web-svc-demo
+```
+
+```text output
+NAME                     ADDRESSTYPE   PORTS   ENDPOINTS
+web-svc-demo-x7k2p       IPv4          80      192.168.135.5,192.168.198.11,192.168.222.3
 ```
 
 Probar la resolución desde otro pod:
@@ -250,6 +259,32 @@ EOF
 
 El nombre del objeto Endpoints DEBE coincidir exactamente con el nombre del Service para que Kubernetes los asocie; no hay ningún otro vínculo declarado entre ambos.
 
+Nota: la API de Endpoints está deprecada desde 1.33, así que `kubectl get endpoints` mostrará una advertencia, aunque funciona. La alternativa recomendada hoy es crear un EndpointSlice manual. Usa uno u otro, no ambos para el mismo Service:
+
+```bash exec
+kubectl apply -f - <<'EOF'
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: db-externa-1
+  labels:
+    kubernetes.io/service-name: db-externa
+addressType: IPv4
+ports:
+- port: 5432
+  protocol: TCP
+endpoints:
+- addresses:
+  - 172.16.46.200
+EOF
+```
+
+Aquí el vínculo con el Service NO es el nombre del objeto, sino el label `kubernetes.io/service-name`; el `metadata.name` del EndpointSlice puede ser cualquiera.
+
+Verificar el Service y el objeto que hayas creado.
+
+Endpoints (el que suele pedir el examen):
+
 ```bash exec
 kubectl get svc db-externa
 kubectl get endpoints db-externa
@@ -261,6 +296,17 @@ db-externa    ClusterIP   10.96.201.7    5432/TCP
 
 NAME          ENDPOINTS
 db-externa    172.16.46.200:5432
+```
+
+EndpointSlice (API moderna):
+
+```bash exec
+kubectl get endpointslices -l kubernetes.io/service-name=db-externa
+```
+
+```text output
+NAME           ADDRESSTYPE   PORTS   ENDPOINTS
+db-externa-1   IPv4          5432    172.16.46.200
 ```
 
 Cualquier pod del cluster ahora puede conectarse a `db-externa:5432`, sin saber que el backend real vive fuera de Kubernetes.
@@ -314,7 +360,9 @@ spec:
 EOF
 ```
 
-Paso 2, observar el síntoma:
+Paso 2, observar el síntoma: el Service existe, pero no tiene ninguna dirección asociada.
+
+Endpoints (el que suele pedir el examen):
 
 ```bash exec
 kubectl get endpoints svc-mal-conectado
@@ -325,7 +373,20 @@ NAME                 ENDPOINTS
 svc-mal-conectado    <none>
 ```
 
-Paso 3, diagnóstico paso a paso. Un Service con Endpoints vacío, `<none>`, casi siempre significa que el selector del Service no coincide con ninguna label de ningún pod, distinto de un Service cuyos Endpoints existen pero el cliente igualmente no puede conectar, que apunta a un problema de puerto o de red en lugar de selector.
+EndpointSlice (API moderna):
+
+```bash exec
+kubectl get endpointslices -l kubernetes.io/service-name=svc-mal-conectado
+```
+
+```text output
+NAME                      ADDRESSTYPE   PORTS   ENDPOINTS
+svc-mal-conectado-x7k2p   IPv4          80      <unset>
+```
+
+Paso 3, diagnóstico. Un Service sin direcciones en su EndpointSlice (`<unset>`, o `<none>` si consultas Endpoints) casi siempre significa que su selector no coincide con ninguna label de ningún pod. Si hubiera direcciones y el cliente igualmente no conectara, el problema sería de puerto o de red, no de selector.
+
+Compara el selector del Service contra las labels de los pods. Primero, el selector del Service:
 
 ```bash exec
 kubectl get svc svc-mal-conectado -o jsonpath='{.spec.selector}'
@@ -334,6 +395,8 @@ kubectl get svc svc-mal-conectado -o jsonpath='{.spec.selector}'
 ```text output
 {"app":"nombre-incorrecto"}
 ```
+
+Después, las labels que el Deployment asigna a sus pods:
 
 ```bash exec
 kubectl get deployment app-mal-conectada -o jsonpath='{.spec.template.metadata.labels}'
@@ -351,15 +414,28 @@ Paso 4, corregir:
 kubectl patch service svc-mal-conectado --type=json -p='[{"op":"replace","path":"/spec/selector","value":{"app":"app-mal-conectada"}}]'
 ```
 
-Paso 5, verificar la recuperación:
+Paso 5, verificar la recuperación. Endpoints y EndpointSlice se actualizan en unos segundos y solo incluyen pods en estado Ready.
+
+Endpoints (el que suele pedir el examen):
 
 ```bash exec
 kubectl get endpoints svc-mal-conectado
 ```
 
 ```text output
-NAME                 ENDPOINTS
+NAME                 ENDPOINTS## 8. Laboratorio guiado
 svc-mal-conectado    192.168.135.9:80,192.168.198.14:80
+```
+
+EndpointSlice (API moderna):
+
+```bash exec
+kubectl get endpointslices -l kubernetes.io/service-name=svc-mal-conectado
+```
+
+```text output
+NAME                      ADDRESSTYPE   PORTS   ENDPOINTS
+svc-mal-conectado-x7k2p   IPv4          80      192.168.135.9,192.168.198.14
 ```
 
 ## 9. Checkpoint
@@ -384,15 +460,15 @@ Respuesta: nftables es GA desde Kubernetes 1.33 y es el reemplazo recomendado a 
 
 **Pregunta 4**
 
-Un Service tiene Endpoints con `<none>`. ¿Qué revisas primero?
+Un Service tiene Endpoints con `<none>` (o un EndpointSlice con `<unset>`). ¿Qué## 8. Laboratorio guiado revisas primero?
 
 Respuesta: comparar el campo selector del Service contra las labels reales del template del Deployment o del pod destino; casi siempre el problema es que no coinciden exactamente.
 
 **Pregunta 5**
 
-¿Qué campo vincula un objeto Endpoints manual con su Service correspondiente?
+¿Qué campo vincula un objeto Endpoints manual, o un EndpointSlice manual, con su Service correspondiente?
 
-Respuesta: el `metadata.name` de ambos objetos debe coincidir exactamente; no existe ningún otro campo de referencia explícita entre un Service y sus Endpoints.
+Respuesta: depende del objeto. Con Endpoints, el `metadata.name` de ambos objetos debe coincidir exactamente; no existe ningún otro campo de referencia. Con EndpointSlice, el vínculo es el label `kubernetes.io/service-name: <nombre-del-service>`, y el `metadata.name` del EndpointSlice puede ser distinto.
 
 ## 10. Laboratorio cronometrado
 
@@ -403,8 +479,8 @@ Tarea:
 1. Crea un Deployment api-backend con imagen nginx:1.25 y 3 réplicas.
 2. Expón api-backend con un Service ClusterIP llamado api-backend-svc en el puerto 8080 hacia el puerto 80 del contenedor.
 3. Expón el mismo Deployment con un segundo Service tipo NodePort llamado api-backend-nodeport en el puerto 80.
-4. Crea un Service sin selector llamado legado-svc en el puerto 3306, con un Endpoints manual apuntando a la IP 172.16.46.201.
-5. Guarda en /tmp/endpoints-count.txt el número de Endpoints de api-backend-svc.
+4. Crea un Service sin selector llamado legado-svc en el puerto 3306, con un Endpoints (o EndpointSlice) manual apuntando a la IP 172.16.46.201.
+5. Guarda en /tmp/endpoints-count.txt el número de direcciones de api-backend-svc, consultando Endpoints o EndpointSlices.
 6. Guarda en /tmp/nodeport.txt el NodePort asignado automáticamente a api-backend-nodeport.
 
 Criterios de éxito:
@@ -458,9 +534,39 @@ subsets:
   - port: 3306
 EOF
 
-kubectl get endpoints api-backend-svc -o jsonpath='{.subsets[0].addresses}' | grep -o '"ip"' | wc -l > /tmp/endpoints-count.txt
-
 kubectl get svc api-backend-nodeport -o jsonpath='{.spec.ports[0].nodePort}' > /tmp/nodeport.txt
+```
+
+Paso 4 con EndpointSlice (API moderna), en lugar del objeto Endpoints de la solución anterior:
+
+```bash exec
+kubectl apply -f - <<'EOF'
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: legado-svc-1
+  labels:
+    kubernetes.io/service-name: legado-svc
+addressType: IPv4
+ports:
+- port: 3306
+  protocol: TCP
+endpoints:
+- addresses:
+  - 172.16.46.201
+EOF
+```
+
+Paso 5 con Endpoints (el que suele pedir el examen):
+
+```bash exec
+kubectl get endpoints api-backend-svc -o jsonpath='{.subsets[0].addresses}' | grep -o '"ip"' | wc -l > /tmp/endpoints-count.txt
+```
+
+Paso 5 con EndpointSlice (API moderna), da el mismo resultado:
+
+```bash exec
+kubectl get endpointslices -l kubernetes.io/service-name=api-backend-svc -o jsonpath='{.items[*].endpoints[*].addresses[0]}' | wc -w > /tmp/endpoints-count.txt
 ```
 
 ## 11. Troubleshooting - casos reales
@@ -469,7 +575,7 @@ kubectl get svc api-backend-nodeport -o jsonpath='{.spec.ports[0].nodePort}' > /
 
 **Síntoma:**
 
-`kubectl get endpoints nombre-svc` muestra `<none>`, aunque `kubectl get pods` confirma que hay pods Running que deberían ser el destino.
+`kubectl get endpoints nombre-svc` muestra `<none>` (o `kubectl get endpointslices -l kubernetes.io/service-name=nombre-svc` muestra `<unset>`), aunque `kubectl get pods` confirma que hay pods Running que deberían ser el destino.
 
 Diagnóstico paso a paso:
 
@@ -488,7 +594,7 @@ Corregir el selector del Service, o corregir las labels del Deployment, para que
 
 **Síntoma:**
 
-`kubectl get endpoints` muestra IPs y puertos válidos, pero un cliente dentro del cluster recibe connection refused o timeout al intentar conectarse al Service.
+`kubectl get endpoints` (o `kubectl get endpointslices`) muestra IPs y puertos válidos, pero un cliente dentro del cluster recibe connection refused o timeout al intentar conectarse al Service.
 
 Diagnóstico paso a paso:
 
@@ -514,7 +620,7 @@ Corregir `targetPort` en el Service para que coincida con el puerto real de escu
 
 **Síntoma:**
 
-El Service y sus Endpoints se ven correctos en la API, pero el tráfico igualmente no llega a los pods, incluso desde dentro del mismo nodo.
+El Service y sus Endpoints o EndpointSlices se ven correctos en la API, pero el tráfico igualmente no llega a los pods, incluso desde dentro del mismo nodo.
 
 Diagnóstico paso a paso:
 
@@ -552,6 +658,7 @@ Limpieza del módulo:
 kubectl delete deployment web-svc-demo app-mal-conectada api-backend
 kubectl delete svc web-svc-demo web-svc-nodeport web-svc-lb db-externa svc-mal-conectado api-backend-svc api-backend-nodeport legado-svc
 kubectl delete endpoints db-externa legado-svc
+kubectl delete endpointslice db-externa-1 legado-svc-1
 kubectl delete pod test-client
 ```
 
