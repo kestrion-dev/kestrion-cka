@@ -533,8 +533,6 @@ subsets:
   ports:
   - port: 3306
 EOF
-
-kubectl get svc api-backend-nodeport -o jsonpath='{.spec.ports[0].nodePort}' > /tmp/nodeport.txt
 ```
 
 Paso 4 con EndpointSlice (API moderna), en lugar del objeto Endpoints de la solución anterior:
@@ -567,6 +565,12 @@ Paso 5 con EndpointSlice (API moderna), da el mismo resultado:
 
 ```bash exec
 kubectl get endpointslices -l kubernetes.io/service-name=api-backend-svc -o jsonpath='{.items[*].endpoints[*].addresses[0]}' | wc -w > /tmp/endpoints-count.txt
+```
+
+Paso 6, el NodePort asignado automáticamente:
+
+```bash exec
+kubectl get svc api-backend-nodeport -o jsonpath='{.spec.ports[0].nodePort}' > /tmp/nodeport.txt
 ```
 
 ## 11. Troubleshooting - casos reales
