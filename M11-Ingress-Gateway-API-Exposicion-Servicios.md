@@ -194,7 +194,32 @@ NAME             CLASS   HOSTS          ADDRESS   PORTS
 ingress-tienda   nginx   tienda.local             80
 ```
 
-Probar desde cka-cp1, simulando el host con el flag de curl:
+Probar el acceso. El controller de Ingress está expuesto como NodePort (7.1), así que necesitas dos datos: la IP de un nodo y el puerto asignado.
+
+La IP puede ser la de cualquier nodo del cluster, porque un NodePort se abre en todos, como viste en M10. Consúltala en la columna `INTERNAL-IP`:
+
+```bash exec
+kubectl get nodes -o wide
+```
+
+```text output
+NAME           STATUS   ROLES           INTERNAL-IP
+cka-cp1        Ready    control-plane   172.16.46.130
+cka-worker1    Ready    <none>          172.16.46.128
+cka-worker2    Ready    <none>          172.16.46.129
+```
+
+El puerto lo asigna Kubernetes al azar entre 30000 y 32767, así que puede ser distinto en tu cluster. Extrae el real del Service del controller, el que lleva `80:<puerto>/TCP`:
+
+```bash exec
+kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.spec.ports[0].nodePort}'
+```
+
+```text output
+31080
+```
+
+Ahora prueba el Ingress. El flag `-H "Host: tienda.local"` envía el nombre de dominio en la cabecera HTTP, porque `tienda.local` no existe en ningún DNS: el controller decide a qué Service enrutar según ese host. Sustituye IP y puerto por los tuyos:
 
 ```bash exec
 curl -H "Host: tienda.local" http://172.16.46.128:31080
@@ -243,6 +268,8 @@ spec:
 EOF
 ```
 
+Usa la misma IP de nodo y el mismo puerto HTTP obtenidos en 7.2, sustituyéndolos por los tuyos:
+
 ```bash exec
 curl -H "Host: multi.local" http://172.16.46.128:31080/tienda
 curl -H "Host: multi.local" http://172.16.46.128:31080/api
@@ -283,6 +310,18 @@ spec:
               number: 80
 EOF
 ```
+
+Usa la misma IP de nodo de 7.2. El puerto HTTPS es el segundo del Service del controller (`443:<puerto>/TCP`); extráelo con:
+
+```bash exec
+kubectl get svc -n ingress-nginx ingress-nginx-controller -o jsonpath='{.spec.ports[1].nodePort}'
+```
+
+```text output
+31443
+```
+
+Sustituye IP y puerto por los tuyos:
 
 ```bash exec
 curl -k -H "Host: tienda.local" https://172.16.46.128:31443

@@ -1265,6 +1265,11 @@ Cada hallazgo se documentará antes de ampliar el trabajo. Ejecutar esta fase re
 - `M10-Services-kube-proxy.md`: Endpoints marcado como deprecado (1.33), añadido EndpointSlice manual en 7.4, checkpoint 5 y limpieza ampliada. Tras revisión, 7.1, 7.4, sección 8, lab cronometrado y troubleshooting muestran ambas APIs (Endpoints, el del examen, y EndpointSlice).
 - Sin ejecución en cluster; cambios portados también a `src/content/modulos/services-kube-proxy.md`. Sin commit.
 
+### 2026-11-16 — Aclaración de IP y puerto en M11
+
+- 7.2, 7.3 y HTTPS: añadidos `kubectl get nodes -o wide` y `jsonpath` del NodePort real, con explicación del flag `Host`. Aplicado en `M11-Ingress-Gateway-API-Exposicion-Servicios.md` y `src/content/modulos/ingress-gateway-api.md`.
+- Sin ejecución en cluster. Sin commit.
+
 ### Estado para continuar
 
 V2 en producción. Último commit local de `main`: `7fb08f4` (2026-09-15), coincidente con la referencia local `origin/main`. Arquitectura completa y verificada, Cloudflare confirmado operativo en la revisión de septiembre. Pendiente: revisar los usos de `crictl` sin `sudo` en M02, M03, M15 y M16 (ver nota arriba); seguir con la revisión práctica de M06 en curso y del resto de módulos si el propietario encuentra más discrepancias al estudiar.
