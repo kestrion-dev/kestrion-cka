@@ -59,9 +59,9 @@ No enruta tráfico de pods en absoluto. Es un alias DNS: mapea el nombre del Ser
 
 ### 5.3 Endpoints y EndpointSlices
 
-Un Service, por sí mismo, no sabe directamente qué pods existen; delega esa información en otro objeto. Endpoints es el objeto original de Kubernetes que lista las IPs y puertos de los pods que coinciden con el selector del Service. Desde la versión 1.19, Kubernetes usa internamente EndpointSlices, una versión más escalable del mismo concepto, que divide la lista en fragmentos, slices, para clusters con miles de pods por Service, evitando actualizar un único objeto gigante en cada cambio.
+Un Service, por sí mismo, no sabe directamente qué pods existen; delega esa información en otro objeto. Endpoints es el objeto original de Kubernetes que lista las IPs y puertos de los pods que coinciden con el selector del Service. Kubernetes usa internamente EndpointSlices, una versión más escalable del mismo concepto, que divide la lista en fragmentos, slices, para clusters con miles de pods por Service, evitando actualizar un único objeto gigante en cada cambio. EndpointSlices llegó a GA en la versión 1.21, y kube-proxy los usa por defecto desde la 1.19.
 
-`kubectl get endpoints` sigue funcionando por compatibilidad y sigue siendo material de examen, pero `kubectl get endpointslices` muestra el objeto que realmente usa el cluster internamente. Un controller dedicado mantiene ambos sincronizados automáticamente con el estado real de los pods, siguiendo el mismo patrón de reconciliation loop visto en M02.
+La API de Endpoints está DEPRECADA desde Kubernetes 1.33: `kubectl get endpoints` sigue funcionando y sigue siendo material de examen, pero imprime una advertencia de deprecación. `kubectl get endpointslices` muestra el objeto que realmente usa el cluster internamente y es el recomendado hoy. El examen puede pedir cualquiera de los dos, así que debes dominar ambos. Un controller dedicado mantiene ambos sincronizados automáticamente con el estado real de los pods, siguiendo el mismo patrón de reconciliation loop visto en M02.
 
 ### 5.4 kube-proxy y sus modos
 
@@ -241,6 +241,32 @@ EOF
 
 El nombre del objeto Endpoints DEBE coincidir exactamente con el nombre del Service para que Kubernetes los asocie; no hay ningún otro vínculo declarado entre ambos.
 
+Nota: la API de Endpoints está deprecada desde 1.33, así que `kubectl get endpoints` mostrará una advertencia, aunque funciona. La alternativa recomendada hoy es crear un EndpointSlice manual. Usa uno u otro, no ambos para el mismo Service:
+
+```bash exec
+kubectl apply -f - <<'EOF'
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: db-externa-1
+  labels:
+    kubernetes.io/service-name: db-externa
+addressType: IPv4
+ports:
+- port: 5432
+  protocol: TCP
+endpoints:
+- addresses:
+  - 172.16.46.200
+EOF
+```
+
+Aquí el vínculo con el Service NO es el nombre del objeto, sino el label `kubernetes.io/service-name`; el `metadata.name` del EndpointSlice puede ser cualquiera.
+
+```bash exec
+kubectl get endpointslices -l kubernetes.io/service-name=db-externa
+```
+
 ```bash exec
 kubectl get svc db-externa
 kubectl get endpoints db-externa
@@ -381,9 +407,9 @@ Respuesta: comparar el campo selector del Service contra las labels reales del t
 
 **Pregunta 5**
 
-¿Qué campo vincula un objeto Endpoints manual con su Service correspondiente?
+¿Qué campo vincula un objeto Endpoints manual, o un EndpointSlice manual, con su Service correspondiente?
 
-Respuesta: el `metadata.name` de ambos objetos debe coincidir exactamente; no existe ningún otro campo de referencia explícita entre un Service y sus Endpoints.
+Respuesta: depende del objeto. Con Endpoints, el `metadata.name` de ambos objetos debe coincidir exactamente; no existe ningún otro campo de referencia. Con EndpointSlice, el vínculo es el label `kubernetes.io/service-name: <nombre-del-service>`, y el `metadata.name` del EndpointSlice puede ser distinto.
 
 ## 10. Laboratorio cronometrado
 
@@ -395,7 +421,7 @@ Tarea:
 2. Expón api-backend con un Service ClusterIP llamado api-backend-svc en el puerto 8080 hacia el puerto 80 del contenedor.
 3. Expón el mismo Deployment con un segundo Service tipo NodePort llamado api-backend-nodeport en el puerto 80.
 4. Crea un Service sin selector llamado legado-svc en el puerto 3306, con un Endpoints manual apuntando a la IP 172.16.46.201.
-5. Guarda en /tmp/endpoints-count.txt el número de Endpoints de api-backend-svc.
+5. Usando EndpointSlices (no Endpoints), guarda en /tmp/endpoints-count.txt el número de direcciones de api-backend-svc.
 6. Guarda en /tmp/nodeport.txt el NodePort asignado automáticamente a api-backend-nodeport.
 
 Criterios de éxito:
@@ -449,7 +475,7 @@ subsets:
   - port: 3306
 EOF
 
-kubectl get endpoints api-backend-svc -o jsonpath='{.subsets[0].addresses}' | grep -o '"ip"' | wc -l > /tmp/endpoints-count.txt
+kubectl get endpointslices -l kubernetes.io/service-name=api-backend-svc -o jsonpath='{.items[*].endpoints[*].addresses[0]}' | wc -w > /tmp/endpoints-count.txt
 
 kubectl get svc api-backend-nodeport -o jsonpath='{.spec.ports[0].nodePort}' > /tmp/nodeport.txt
 ```
@@ -541,6 +567,7 @@ Limpieza del módulo:
 kubectl delete deployment web-svc-demo app-mal-conectada api-backend
 kubectl delete svc web-svc-demo web-svc-nodeport web-svc-lb db-externa svc-mal-conectado api-backend-svc api-backend-nodeport legado-svc
 kubectl delete endpoints db-externa legado-svc
+kubectl delete endpointslice db-externa-1
 kubectl delete pod test-client
 ```
 

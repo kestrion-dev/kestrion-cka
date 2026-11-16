@@ -1260,6 +1260,11 @@ Cada hallazgo se documentará antes de ampliar el trabajo. Ejecutar esta fase re
 - Limpiezas simplificadas: retirados `--cascade=foreground`, `--wait=true` y `--ignore-not-found=true`, sin explicaciones de NotFound.
 - Laboratorio 8: añadido borrado de `pod-diagnostico` y comprobación al cierre, junto con la retirada del taint.
 
+### 2026-11-16 — Correcciones de M10 (Endpoints/EndpointSlices)
+
+- `M10-Services-kube-proxy.md`: Endpoints marcado como deprecado (1.33), añadido EndpointSlice manual en 7.4, checkpoint 5 y paso 5 del lab cronometrado ahora con EndpointSlices, limpieza ampliada.
+- Sin ejecución en cluster; módulo aún sin incorporar a `src/content/modulos/`. Sin commit.
+
 ### Estado para continuar
 
 V2 en producción. Último commit local de `main`: `7fb08f4` (2026-09-15), coincidente con la referencia local `origin/main`. Arquitectura completa y verificada, Cloudflare confirmado operativo en la revisión de septiembre. Pendiente: revisar los usos de `crictl` sin `sudo` en M02, M03, M15 y M16 (ver nota arriba); seguir con la revisión práctica de M06 en curso y del resto de módulos si el propietario encuentra más discrepancias al estudiar.
